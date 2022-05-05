@@ -75,11 +75,11 @@ python -m torch.distributed.launch --master_port 50130 --nproc_per_node=8 --use_
 ### Test
 To test Conformer-S on ImageNet on a single gpu run:
 ```
-CUDA_VISIBLE_DEVICES=0, python main.py  --model Conformer_small_patch16 --eval --batch-size 64 \
+CUDA_VISIBLE_DEVICES=0, python3 main.py  --model Conformer_small_patch16 --eval --batch-size 64 \
                 --input-size 224 \
                 --data-set IMNET \
                 --num_workers 4 \
-                --data-path /data/user/Dataset/ImageNet_ILSVRC2012/ \
+                --data-path ~/Dataset/ImageNet_ILSVRC2012/ \
                 --epochs 100 \
                 --resume ../Conformer_small_patch16.pth
 ```
