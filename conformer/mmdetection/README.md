@@ -1,5 +1,17 @@
 ## Notice
-The code is forked from official [project](https://github.com/open-mmlab/mmdetection). **So the basic install and usage of mmdetection can be found in** [get_started.md](https://github.com/open-mmlab/mmdetection/blob/master/docs/get_started.md). We just add Conformer as a backbone in `mmdet/models/backbones/Conformer.py`.
+The code is forked from official [project](https://github.com/open-mmlab/mmdetection). **So the basic install and usage of mmdetection can be found in** [get_started.md](https://github.com/open-mmlab/mmdetection/blob/master/docs/get_started.md). 
+
+pip3 install mmcv-full==1.2.7 -f https://download.openmmlab.com/mmcv/dist/cu101/torch1.7.0/index.html
+pip3 install -r requirements/build.txt
+pip3 install -v -e .
+pip3 install instaboostfast
+pip3 install git+https://github.com/cocodataset/panopticapi.git
+pip3 install git+https://github.com/lvis-dataset/lvis-api.git
+pip3 install -r requirements/optional.txt
+mkdir data
+wget http://images.cocodataset.org/annotations/annotations_trainval2017.zip
+
+We just add Conformer as a backbone in `mmdet/models/backbones/Conformer.py`.
 
 At present, we use the feature maps of different stages in the CNN branch as the input of FPN, so that it can be quickly applied to the detection algorithm based on the feature pyramid. **At the same time, we think that how to use the features of Transformer branch for detection is also an interesting problem.**
 
@@ -11,11 +23,11 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export OMP_NUM_THREADS=1
 GPU_NUM=8
 
-CONFIG="./configs/faster_rcnn/faster_rcnn_conformer_small_patch32_fpn_1x_coco.py"
-WORK_DIR='./work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800'
+CONFIG="./conformer/mmdetection/configs/faster_rcnn/faster_rcnn_conformer_small_patch32_fpn_1x_coco.py"
+WORK_DIR='./conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800'
 
 # Train
-python -m torch.distributed.launch --nproc_per_node=${GPU_NUM} --master_port=50040 --use_env ./tools/train.py ${CONFIG} --work-dir ${WORK_DIR} --gpus ${GPU_NUM}  --launcher pytorch --cfg-options model.pretrained='./pretrain_models/Conformer_small_patch32.pth' model.backbone.patch_size=32
+python3 -m torch.distributed.launch --nproc_per_node=${GPU_NUM} --master_port=50040 --use_env ./conformer/mmdetection/tools/train.py --config ${CONFIG} --work-dir ${WORK_DIR} --gpus ${GPU_NUM}  --launcher pytorch --cfg-options model.pretrained='./conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth' model.backbone.patch_size=32
 
 # Test on multiple cards
 python -m torch.distributed.launch --nproc_per_node=${GPU_NUM} --master_port=50040 --use_env ./tools/test.py ${CONFIG} ${WORK_DIR}/latest.pth --launcher pytorch  --eval bbox

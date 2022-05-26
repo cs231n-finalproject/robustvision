@@ -432,6 +432,7 @@ class Conformer(nn.Module):
 
         # 1 stage
         stage_1_channel = int(base_channel * channel_ratio)
+        # trans_dw_stride = patch_size // 4
         trans_dw_stride = patch_size // 4
         self.conv_1 = ConvBlock(inplanes=64, outplanes=stage_1_channel, res_conv=True, stride=1)
         self.trans_patch_conv = nn.Conv2d(64, embed_dim, kernel_size=trans_dw_stride, stride=trans_dw_stride, padding=0)

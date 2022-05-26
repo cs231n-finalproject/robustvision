@@ -20,8 +20,8 @@ from mmdet.utils import collect_env, get_root_logger
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')
-    parser.add_argument('config', help='train config file path')
-    parser.add_argument('--work-dir', help='the dir to save logs and models')
+    parser.add_argument('--config', type=str, default='./conformer/mmdetection/configs/faster_rcnn/faster_rcnn_conformer_small_patch32_fpn_1x_coco.py', help='train config file path')
+    parser.add_argument('--work-dir', type=str, default='./conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800', help='the dir to save logs and models')
     parser.add_argument(
         '--resume-from', help='the checkpoint file to resume from')
     parser.add_argument(
@@ -32,6 +32,7 @@ def parse_args():
     group_gpus.add_argument(
         '--gpus',
         type=int,
+        default=1,
         help='number of gpus to use '
         '(only applicable to non-distributed training)')
     group_gpus.add_argument(
@@ -56,6 +57,7 @@ def parse_args():
         '--cfg-options',
         nargs='+',
         action=DictAction,
+        default={'model.pretrained':'./conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth', 'model.backbone.patch_size':32},
         help='override some settings in the used config, the key-value pair '
         'in xxx=yyy format will be merged into config file. If the value to '
         'be overwritten is a list, it should be like key="[a,b]" or key=a,b '
@@ -85,6 +87,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    print(args)
 
     cfg = Config.fromfile(args.config)
     if args.cfg_options is not None:
@@ -117,6 +120,7 @@ def main():
         distributed = False
     else:
         distributed = True
+        print(args.launcher)
         init_dist(args.launcher, **cfg.dist_params)
         # re-set gpu_ids with distributed training mode
         _, world_size = get_dist_info()
