@@ -62,6 +62,20 @@ def deit_base_patch16_224(pretrained=False, **kwargs):
     return model
 
 @register_model
+def vit_huge_patch14(pretrained=False, **kwargs):
+    model = VisionTransformer(
+        patch_size=14, embed_dim=1280, depth=32, num_heads=16, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    model.default_cfg = _cfg()
+    if pretrained:
+        checkpoint = torch.hub.load_state_dict_from_url(
+            url="https://dl.fbaipublicfiles.com/mae/finetune/mae_finetuned_vit_huge.pth",
+            map_location="cpu", check_hash=True
+        )
+        model.load_state_dict(checkpoint["model"])
+    return model
+
+@register_model
 def Conformer_tiny_patch16(pretrained=False, **kwargs):
     model = Conformer(patch_size=16, channel_ratio=1, embed_dim=384, depth=12,
                       num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)

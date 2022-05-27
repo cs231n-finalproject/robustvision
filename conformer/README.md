@@ -59,10 +59,10 @@ The directory structure is the standard layout for the torchvision [`datasets.Im
 To train Conformer-S on ImageNet on a single node with 8 gpus for 300 epochs run:
 
 ```
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1
 OUTPUT='./output/Conformer_small_patch16_batch_1024_lr1e-3_300epochs'
 
-python -m torch.distributed.launch --master_port 50130 --nproc_per_node=8 --use_env main.py \
+python3 -m torch.distributed.launch --master_port 50130 --nproc_per_node=8 --use_env main.py \
                                    --model Conformer_small_patch16 \
                                    --data-set IMNET \
                                    --batch-size 128 \

@@ -29,8 +29,8 @@ def get_args_parser():
     parser.add_argument('--epochs', default=10, type=int)
 
     # Model parameters
-    parser.add_argument('--model', default='deit_base_patch16_224', type=str, metavar='MODEL',
-                        help='Name of model to train')
+    parser.add_argument('--model', default='Conformer_small_patch16', type=str, metavar='MODEL',
+                        help='Name of model to train', choices=['Conformer_small_patch16', 'deit_base_patch16_224', 'vit_huge_patch14'])
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
