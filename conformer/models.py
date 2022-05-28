@@ -6,6 +6,7 @@ from functools import partial
 
 from vision_transformer import VisionTransformer, _cfg
 from conformer import Conformer
+from transconv import TransConv
 from timm.models.registry import register_model
 
 
@@ -62,7 +63,35 @@ def deit_base_patch16_224(pretrained=False, **kwargs):
     return model
 
 @register_model
-def vit_huge_patch14(pretrained=False, **kwargs):
+def mae_vit_base_patch16(pretrained=False, **kwargs):
+    model = VisionTransformer(
+        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    model.default_cfg = _cfg()
+    if pretrained:
+        checkpoint = torch.hub.load_state_dict_from_url(
+            url="https://dl.fbaipublicfiles.com/mae/finetune/mae_finetuned_vit_base.pth",
+            map_location="cpu", check_hash=True
+        )
+        model.load_state_dict(checkpoint["model"], strict=False)        
+    return model
+
+@register_model
+def mae_vit_large_patch16(pretrained=False, **kwargs):
+    model = VisionTransformer(
+        patch_size=16, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    model.default_cfg = _cfg()
+    if pretrained:
+        checkpoint = torch.hub.load_state_dict_from_url(
+            url="https://dl.fbaipublicfiles.com/mae/finetune/mae_finetuned_vit_large.pth",
+            map_location="cpu", check_hash=True
+        )
+        model.load_state_dict(checkpoint["model"], strict=False)          
+    return model
+
+@register_model
+def mae_vit_huge_patch14(pretrained=False, **kwargs):
     model = VisionTransformer(
         patch_size=14, embed_dim=1280, depth=32, num_heads=16, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
@@ -72,7 +101,7 @@ def vit_huge_patch14(pretrained=False, **kwargs):
             url="https://dl.fbaipublicfiles.com/mae/finetune/mae_finetuned_vit_huge.pth",
             map_location="cpu", check_hash=True
         )
-        model.load_state_dict(checkpoint["model"])
+        model.load_state_dict(checkpoint["model"], strict=False)
     return model
 
 @register_model
@@ -105,4 +134,16 @@ def Conformer_base_patch16(pretrained=False, **kwargs):
                       num_heads=9, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
         raise NotImplementedError
+    return model
+
+@register_model
+def Transconv_small_patch16(pretrained=False, **kwargs):
+    model = TransConv(patch_size=16, channel_ratio=4, embed_dim=768, depth=12,
+                      num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)
+    if pretrained:
+        pre_trained_vit = mae_vit_base_patch16(pretrained=True)
+        model = TransConv(patch_size=16, channel_ratio=4, embed_dim=768, depth=12,
+                        num_heads=6, mlp_ratio=4, qkv_bias=True,
+                        pre_trained_vit=pre_trained_vit, finetune=False,
+                        **kwargs)
     return model

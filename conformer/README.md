@@ -38,6 +38,8 @@ pip install timm==0.3.2
 ## Data preparation
 
 Download and extract ImageNet train and val images from http://image-net.org/.
+To test, use min version: https://www.kaggle.com/datasets/ifigotin/imagenetmini-1000?select=imagenet-mini
+- kaggle datasets list -s 'imagenet' -> kaggle datasets download -d 'ifigotin/imagenetmini-1000' -> unzip imagenetmini-1000 -> mv imagenetmini-1000 ImageNet_ILSVRC2012
 The directory structure is the standard layout for the torchvision [`datasets.ImageFolder`](https://pytorch.org/docs/stable/torchvision/datasets.html#imagefolder), and the training and validation data is expected to be in the `train/` folder and `val` folder respectively:
 
 ```
@@ -69,6 +71,17 @@ python3 -m torch.distributed.launch --master_port 50130 --nproc_per_node=8 --use
                                    --lr 0.001 \
                                    --num_workers 4 \
                                    --data-path /data/user/Dataset/ImageNet_ILSVRC2012/ \
+                                   --output_dir ${OUTPUT} \
+                                   --epochs 300
+
+
+python3 -m torch.distributed.launch --master_port 50130 --nproc_per_node=8 --use_env ./conformer/main.py \
+                                   --model Transconv_small_patch16 \
+                                   --data-set IMNET \
+                                   --batch-size 128 \
+                                   --lr 0.001 \
+                                   --num_workers 4 \
+                                   --data-path /data/user/Dataset/ImageNet_ILSVRC2012_FULL/ \
                                    --output_dir ${OUTPUT} \
                                    --epochs 300
 ```

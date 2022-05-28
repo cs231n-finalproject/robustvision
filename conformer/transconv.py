@@ -1,9 +1,11 @@
+from mimetypes import init
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
 
 from timm.models.layers import DropPath, trunc_normal_
+from vision_transformer import VisionTransformer as ViT
 
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
@@ -255,9 +257,10 @@ class ConvTransBlock(nn.Module):
 
     def __init__(self, inplanes, outplanes, res_conv, stride, dw_stride, embed_dim, num_heads=12, mlp_ratio=4.,
                  qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.,
-                 last_fusion=False, num_med_block=0, groups=1):
+                 last_fusion=False, num_med_block=0, groups=1, pre_trans_block=None):
 
         super(ConvTransBlock, self).__init__()
+        self.has_pre_trans_block = True if pre_trans_block is not None else False
         expansion = 4
         self.cnn_block = ConvBlock(inplanes=inplanes, outplanes=outplanes, res_conv=res_conv, stride=stride, groups=groups)
 
@@ -276,9 +279,12 @@ class ConvTransBlock(nn.Module):
 
         self.expand_block = FCUUp(inplanes=embed_dim, outplanes=outplanes // expansion, up_stride=dw_stride)
 
-        self.trans_block = TransformerBlock(
-            dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate)
+        if self.has_pre_trans_block:
+            self.trans_block = pre_trans_block
+        else:
+            self.trans_block = TransformerBlock(
+                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate)
 
         self.dw_stride = dw_stride
         self.embed_dim = embed_dim
@@ -287,12 +293,13 @@ class ConvTransBlock(nn.Module):
 
     def forward(self, x, x_t):
         x, x2 = self.cnn_block(x)
-
         _, _, H, W = x2.shape
 
-        x_st = self.squeeze_block(x2, x_t)
-
-        x_t = self.trans_block(x_st + x_t)
+        if self.has_pre_trans_block:
+            x_t = self.trans_block(x_t)
+        else:
+            x_st = self.squeeze_block(x2, x_t)
+            x_t = self.trans_block(x_st + x_t)
 
         if self.num_med_block > 0:
             for m in self.med_block:
@@ -305,19 +312,24 @@ class ConvTransBlock(nn.Module):
         return x, x_t
 
 
-class Conformer(nn.Module):
+class TransConv(nn.Module):
 
     def __init__(self, patch_size=16, in_chans=3, num_classes=1000, base_channel=64, channel_ratio=4, num_med_block=0,
-                 embed_dim=768, depth=12, num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None,
-                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0.):
+                 embed_dim=768, depth=12, num_heads=12, mlp_ratio=4., qkv_bias=False, pre_trained_vit=None, finetune=False,
+                 qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.):
 
         # Transformer
         super().__init__()
+
+        self.has_pre_trained_vit = True if pre_trained_vit is not None else False
+        if pre_trained_vit is not None and finetune is False:
+            freeze(pre_trained_vit)
+
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         assert depth % 3 == 0
 
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if pre_trained_vit is None else pre_trained_vit.cls_token
         self.trans_dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
         # Classifier head
@@ -336,10 +348,16 @@ class Conformer(nn.Module):
         stage_1_channel = int(base_channel * channel_ratio)
         trans_dw_stride = patch_size // 4
         self.conv_1 = ConvBlock(inplanes=64, outplanes=stage_1_channel, res_conv=True, stride=1)
-        self.trans_patch_conv = nn.Conv2d(64, embed_dim, kernel_size=trans_dw_stride, stride=trans_dw_stride, padding=0)
-        self.trans_1 = TransformerBlock(dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
-                             qk_scale=qk_scale, drop=drop_rate, attn_drop=attn_drop_rate, drop_path=self.trans_dpr[0],
-                             )
+        if pre_trained_vit is not None:
+            self.pos_drop = pre_trained_vit.pos_drop
+            self.pos_embed = pre_trained_vit.pos_embed
+            self.trans_patch_conv = pre_trained_vit.patch_embed
+            self.trans_1 = pre_trained_vit.blocks[0] if pre_trained_vit is not None else None
+        else:
+            self.trans_patch_conv = nn.Conv2d(64, embed_dim, kernel_size=trans_dw_stride, stride=trans_dw_stride, padding=0)
+            self.trans_1 = TransformerBlock(dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                                qk_scale=qk_scale, drop=drop_rate, attn_drop=attn_drop_rate, drop_path=self.trans_dpr[0],
+                                )
 
         # 2~4 stage
         init_stage = 2
@@ -350,10 +368,9 @@ class Conformer(nn.Module):
                         stage_1_channel, stage_1_channel, False, 1, dw_stride=trans_dw_stride, embed_dim=embed_dim,
                         num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                         drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=self.trans_dpr[i-1],
-                        num_med_block=num_med_block
+                        num_med_block=num_med_block, pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None
                     )
             )
-
 
         stage_2_channel = int(base_channel * channel_ratio * 2)
         # 5~8 stage
@@ -368,7 +385,7 @@ class Conformer(nn.Module):
                         in_channel, stage_2_channel, res_conv, s, dw_stride=trans_dw_stride // 2, embed_dim=embed_dim,
                         num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                         drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=self.trans_dpr[i-1],
-                        num_med_block=num_med_block
+                        num_med_block=num_med_block, pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None
                     )
             )
 
@@ -386,7 +403,8 @@ class Conformer(nn.Module):
                         in_channel, stage_3_channel, res_conv, s, dw_stride=trans_dw_stride // 4, embed_dim=embed_dim,
                         num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                         drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=self.trans_dpr[i-1],
-                        num_med_block=num_med_block, last_fusion=last_fusion
+                        num_med_block=num_med_block, last_fusion=last_fusion,
+                        pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None
                     )
             )
         self.fin_stage = fin_stage
@@ -419,19 +437,24 @@ class Conformer(nn.Module):
 
     def forward(self, x):
         B = x.shape[0]
-        cls_tokens = self.cls_token.expand(B, -1, -1)
 
         # pdb.set_trace()
         # stem stage [N, 3, 224, 224] -> [N, 64, 56, 56]
         x_base = self.maxpool(self.act1(self.bn1(self.conv1(x))))
 
         # 1 stage
-        x = self.conv_1(x_base, return_x_2=False)
-
-        x_t = self.trans_patch_conv(x_base).flatten(2).transpose(1, 2)
-        x_t = torch.cat([cls_tokens, x_t], dim=1)
+        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+        if self.has_pre_trained_vit:
+            x_t = self.trans_patch_conv(x)
+            x_t = torch.cat((cls_tokens, x_t), dim=1)
+            x_t = x_t + self.pos_embed
+            x_t = self.pos_drop(x_t)
+        else:       
+            x_t = self.trans_patch_conv(x_base).flatten(2).transpose(1, 2)
+            x_t = torch.cat([cls_tokens, x_t], dim=1)
+        x = self.conv_1(x_base, return_x_2=False)            
         x_t = self.trans_1(x_t)
-        
+
         # 2 ~ final 
         for i in range(2, self.fin_stage):
             x, x_t = eval('self.conv_trans_' + str(i))(x, x_t)
@@ -445,3 +468,8 @@ class Conformer(nn.Module):
         tran_cls = self.trans_cls_head(x_t[:, 0])
 
         return [conv_cls, tran_cls]
+
+
+def freeze(module):
+    for p in module.parameters():
+        p.requires_grad = True

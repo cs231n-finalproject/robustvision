@@ -29,8 +29,9 @@ def get_args_parser():
     parser.add_argument('--epochs', default=10, type=int)
 
     # Model parameters
-    parser.add_argument('--model', default='Conformer_small_patch16', type=str, metavar='MODEL',
-                        help='Name of model to train', choices=['Conformer_small_patch16', 'deit_base_patch16_224', 'vit_huge_patch14'])
+    parser.add_argument('--model', default='Transconv_small_patch16', type=str, metavar='MODEL',
+                        help='Name of model to train', choices=['Conformer_small_patch16', 'deit_base_patch16_224', 'mae_vit_huge_patch14', \
+                        'mae_vit_base_patch16', 'Transconv_small_patch16'])
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
@@ -125,7 +126,7 @@ def get_args_parser():
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # Dataset parameters
-    parser.add_argument('--data-path', default='~/Dataset/ImageNet_ILSVRC2012/', type=str,
+    parser.add_argument('--data-path', default='~/Dataset/ImageNet_ILSVRC2012_FULL/', type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'CIFAR10', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -134,6 +135,7 @@ def get_args_parser():
                         type=str, help='semantic granularity')
     # * Finetuning params
     parser.add_argument('--finetune', default='', help='finetune from checkpoint')
+    parser.add_argument('--pretrained', type=bool, default=True, help='True to load model with pretrained')    
 
     parser.add_argument('--evaluate-freq', type=int, default=1, help='frequency of perform evaluation (default: 5)')
     parser.add_argument('--output_dir', default='',
@@ -216,7 +218,7 @@ def main(args):
     print(f"Creating model: {args.model}")
     model = create_model(
         args.model,
-        pretrained=False,
+        pretrained=args.pretrained,
         num_classes=args.nb_classes,
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
