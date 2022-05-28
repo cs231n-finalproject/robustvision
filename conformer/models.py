@@ -139,13 +139,15 @@ def Conformer_base_patch16(pretrained=False, **kwargs):
 
 @register_model
 def Transconv_small_patch16(pretrained=False, **kwargs):
-    model = TransConv(patch_size=16, channel_ratio=4, embed_dim=768, depth=12,
-                      num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
         pre_trained_vit = mae_vit_base_patch16(pretrained=True)
         pre_trained_conformer = Conformer_small_patch16(pretrained=True)        
         model = TransConv(patch_size=16, channel_ratio=4, embed_dim=768, depth=12,
                         num_heads=6, mlp_ratio=4, qkv_bias=True,
-                        pre_trained_vit=pre_trained_vit, finetune=False, pre_trained_conformer=pre_trained_conformer,
+                        pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
+                        additive_fusion_down=False, additive_fusion_up=False,                        
                         **kwargs)
+    else:
+        model = TransConv(patch_size=16, channel_ratio=4, embed_dim=768, depth=12,
+                        num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)        
     return model

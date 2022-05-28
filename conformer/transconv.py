@@ -27,6 +27,39 @@ class Mlp(nn.Module):
         return x
 
 
+class AdditiveAttention(nn.Module):
+    ''' AttentionPooling used to weighted aggregate news vectors
+    Arg: 
+        d_h: the last dimension of input
+    '''
+    def __init__(self, d_h, hidden_size=200):
+        super(AdditiveAttention, self).__init__()
+        self.att_fc1 = nn.Linear(d_h, hidden_size)
+        self.att_fc2 = nn.Linear(hidden_size, 1)
+
+    def forward(self, x, attn_mask=None):
+        """
+        Args:
+            x: batch_size, candidate_size, candidate_vector_dim
+            attn_mask: batch_size, candidate_size
+        Returns:
+            (shape) batch_size, candidate_vector_dim
+        """
+        bz = x.shape[0]
+        e = self.att_fc1(x)
+        e = nn.Tanh()(e)
+        alpha = self.att_fc2(e)
+
+        alpha = torch.exp(alpha)
+        if attn_mask is not None:
+            alpha = alpha * attn_mask.unsqueeze(2)
+        alpha = alpha / (torch.sum(alpha, dim=1, keepdim=True) + 1e-8)
+
+        x = torch.bmm(x.permute(0, 2, 1), alpha)
+        x = torch.reshape(x, (bz, -1))  # (bz, 400)
+        return x
+
+
 class Attention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
         super().__init__()
@@ -78,7 +111,7 @@ class TransformerBlock(nn.Module):
 class ConvBlock(nn.Module):
 
     def __init__(self, inplanes, outplanes, stride=1, res_conv=False, act_layer=nn.ReLU, groups=1,
-                 norm_layer=partial(nn.BatchNorm2d, eps=1e-6), drop_block=None, drop_path=None):
+                 norm_layer=partial(nn.BatchNorm2d, eps=1e-6), drop_block=None, drop_path=None, additive_fusion=False, up_shape=None):
         super(ConvBlock, self).__init__()
 
         expansion = 4
@@ -100,12 +133,28 @@ class ConvBlock(nn.Module):
             self.residual_conv = nn.Conv2d(inplanes, outplanes, kernel_size=1, stride=stride, padding=0, bias=False)
             self.residual_bn = norm_layer(outplanes)
 
+        self.additive_fusion = additive_fusion
+        if self.additive_fusion:
+            d_h = up_shape[1]*up_shape[2]*up_shape[3]
+            d_e = 1024
+            self.additive_attention = AdditiveAttention(d_h, d_e)
+
         self.res_conv = res_conv
         self.drop_block = drop_block
         self.drop_path = drop_path
 
     def zero_init_last_bn(self):
         nn.init.zeros_(self.bn3.weight)
+
+    def additive(self, x, x_t):
+        if self.additive_fusion:
+            B, C, H, W = x.shape
+            x_stacked = torch.stack([x, x_t], dim=1).flatten(dim=1)
+            x_fused = self.additive_attention(x_stacked)
+            x_fused = x_fused.reshape((B, C, H, W))
+        else:
+            x_fused = x + x_t
+        return x_fused
 
     def forward(self, x, x_t=None, return_x_2=True):
         residual = x
@@ -116,7 +165,7 @@ class ConvBlock(nn.Module):
             x = self.drop_block(x)
         x = self.act1(x)
 
-        x = self.conv2(x) if x_t is None else self.conv2(x + x_t)
+        x = self.conv2(x) if x_t is None else self.conv2(self.additive(x, x_t))
         x = self.bn2(x)
         if self.drop_block is not None:
             x = self.drop_block(x)
@@ -258,20 +307,30 @@ class ConvTransBlock(nn.Module):
 
     def __init__(self, inplanes, outplanes, res_conv, stride, dw_stride, embed_dim, num_heads=12, mlp_ratio=4.,
                  qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.,
-                 last_fusion=False, num_med_block=0, groups=1, pre_trans_block=None, pre_convtrans_block=None):
+                 last_fusion=False, num_med_block=0, groups=1,
+                 pre_trans_block=None, pre_convtrans_block=None, finetune_vit=False, finetune_conv=True,
+                 additive_fusion_down=False, down_shape=None, additive_fusion_up=False, up_shape=None):
 
         super(ConvTransBlock, self).__init__()
         self.has_pre_trans_block = True if pre_trans_block is not None else False
+        self.has_pre_conv_block = True if pre_convtrans_block is not None else False
+        self.finetune_vit = finetune_vit
+        self.finetune_conv = finetune_conv
         expansion = 4
         self.cnn_block = ConvBlock(inplanes=inplanes, outplanes=outplanes, res_conv=res_conv, stride=stride, groups=groups) \
             if pre_convtrans_block is None else pre_convtrans_block.cnn_block
 
+        # note that the fusion block is never freezed, however, weight can be initialized
         if last_fusion:
-            self.fusion_block = ConvBlock(inplanes=outplanes, outplanes=outplanes, stride=2, res_conv=True, groups=groups) \
-                if pre_convtrans_block is None else pre_convtrans_block.fusion_block
+            self.fusion_block = ConvBlock(inplanes=outplanes, outplanes=outplanes, stride=2, res_conv=True, groups=groups, \
+                additive_fusion=additive_fusion_up, up_shape=up_shape)
+            if pre_convtrans_block is not None:
+                self.fusion_block.load_state_dict(pre_convtrans_block.fusion_block.state_dict(), strict=False)
         else:
-            self.fusion_block = ConvBlock(inplanes=outplanes, outplanes=outplanes, groups=groups) \
-                if pre_convtrans_block is None else pre_convtrans_block.fusion_block
+            self.fusion_block = ConvBlock(inplanes=outplanes, outplanes=outplanes, groups=groups, \
+                additive_fusion=additive_fusion_up, up_shape=up_shape)
+            if pre_convtrans_block is not None:
+                    self.fusion_block.load_state_dict(pre_convtrans_block.fusion_block.state_dict(), strict=False)
 
         if num_med_block > 0:
             if pre_convtrans_block is None:
@@ -293,28 +352,46 @@ class ConvTransBlock(nn.Module):
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate)
 
+        self.additive_fusion = additive_fusion_down
+        if self.additive_fusion:
+            d_h = down_shape[1]
+            d_e = 256
+            self.additive_attention = AdditiveAttention(d_h, d_e)
+
         self.dw_stride = dw_stride
         self.embed_dim = embed_dim
         self.num_med_block = num_med_block
         self.last_fusion = last_fusion
 
+    def additive(self, x_st, x_t):
+        if self.additive_fusion:
+            x_t_stacked = torch.stack([x_st, x_t], dim=1)
+            x_t_fused = self.additive_attention(x_t_stacked)
+        else:
+            x_t_fused = x_st + x_t
+        return x_t_fused
+
     def forward(self, x, x_t):
         x, x2 = self.cnn_block(x)
         _, _, H, W = x2.shape
 
-        if self.has_pre_trans_block:
+        if self.has_pre_trans_block and not self.finetune_vit:
             x_t = self.trans_block(x_t)
         else:
             x_st = self.squeeze_block(x2, x_t)
-            x_t = self.trans_block(x_st + x_t)
+            x_t = self.trans_block(self.additive(x_st, x_t))
 
         if self.num_med_block > 0:
             for m in self.med_block:
                 x = m(x)
-        # [N, 197, 384] -> [N, 64, 56, 56]
-        x_t_r = self.expand_block(x_t, H // self.dw_stride, W // self.dw_stride)
-        # [N, 256, 56, 56] + [N, 64, 56, 56] -> [N, 256, 56, 56]
-        x = self.fusion_block(x, x_t_r, return_x_2=False)
+
+        if self.has_pre_conv_block and not self.finetune_conv:
+            pass # x = x
+        else:
+            # [N, 197, 384] -> [N, 64, 56, 56]
+            x_t_r = self.expand_block(x_t, H // self.dw_stride, W // self.dw_stride)
+            # [N, 256, 56, 56] + [N, 64, 56, 56] -> [N, 256, 56, 56]
+            x = self.fusion_block(x, x_t_r, return_x_2=False)
 
         return x, x_t
 
@@ -323,15 +400,19 @@ class TransConv(nn.Module):
 
     def __init__(self, patch_size=16, in_chans=3, num_classes=1000, base_channel=64, channel_ratio=4, num_med_block=0,
                  embed_dim=768, depth=12, num_heads=12, mlp_ratio=4., qkv_bias=False,
-                 pre_trained_vit=None, finetune=False, pre_trained_conformer=None,
+                 pre_trained_vit=None, finetune_vit=False, pre_trained_conformer=None, finetune_conv=True,
+                 additive_fusion_down=False, additive_fusion_up=False,
                  qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.):
 
         # Transformer
         super().__init__()
 
         self.has_pre_trained_vit = True if pre_trained_vit is not None else False
-        if pre_trained_vit is not None and finetune is False:
+        self.has_pre_trained_conformer = True if pre_trained_conformer is not None else False
+        if pre_trained_vit is not None and finetune_vit is False:
             freeze(pre_trained_vit)
+        if pre_trained_conformer is not None and finetune_conv is False:
+            freeze(pre_trained_conformer)
 
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
@@ -367,9 +448,11 @@ class TransConv(nn.Module):
                                 qk_scale=qk_scale, drop=drop_rate, attn_drop=attn_drop_rate, drop_path=self.trans_dpr[0],
                                 ) if pre_trained_conformer is None else pre_trained_conformer.trans_1
 
+        expansion = 4
         # 2~4 stage
         init_stage = 2
         fin_stage = depth // 3 + 1
+        up_ftr_map_size = 64
         for i in range(init_stage, fin_stage):
             self.add_module('conv_trans_' + str(i),
                     ConvTransBlock(
@@ -378,7 +461,9 @@ class TransConv(nn.Module):
                         drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=self.trans_dpr[i-1],
                         num_med_block=num_med_block,
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
-                        pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None
+                        pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
+                        finetune_vit=finetune_vit, finetune_conv=finetune_conv,
+                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_down, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
                     )
             )
 
@@ -386,6 +471,7 @@ class TransConv(nn.Module):
         # 5~8 stage
         init_stage = fin_stage # 5
         fin_stage = fin_stage + depth // 3 # 9
+        up_ftr_map_size = 64        
         for i in range(init_stage, fin_stage):
             s = 2 if i == init_stage else 1
             in_channel = stage_1_channel if i == init_stage else stage_2_channel
@@ -397,7 +483,9 @@ class TransConv(nn.Module):
                         drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=self.trans_dpr[i-1],
                         num_med_block=num_med_block,
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
-                        pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None
+                        pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
+                        finetune_vit=finetune_vit, finetune_conv=finetune_conv,
+                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_down, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
                     )
             )
 
@@ -405,6 +493,7 @@ class TransConv(nn.Module):
         # 9~12 stage
         init_stage = fin_stage  # 9
         fin_stage = fin_stage + depth // 3  # 13
+        up_ftr_map_size = 64        
         for i in range(init_stage, fin_stage):
             s = 2 if i == init_stage else 1
             in_channel = stage_2_channel if i == init_stage else stage_3_channel
@@ -417,7 +506,9 @@ class TransConv(nn.Module):
                         drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=self.trans_dpr[i-1],
                         num_med_block=num_med_block, last_fusion=last_fusion,
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
-                        pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None
+                        pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
+                        finetune_vit=finetune_vit, finetune_conv=finetune_conv,
+                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_down, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
                     )
             )
         self.fin_stage = fin_stage
