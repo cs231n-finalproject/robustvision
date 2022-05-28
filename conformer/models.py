@@ -7,6 +7,7 @@ from functools import partial
 from vision_transformer import VisionTransformer, _cfg
 from conformer import Conformer
 from transconv import TransConv
+from utils import load_pretrain_model
 from timm.models.registry import register_model
 
 
@@ -117,7 +118,7 @@ def Conformer_small_patch16(pretrained=False, **kwargs):
     model = Conformer(patch_size=16, channel_ratio=4, embed_dim=384, depth=12,
                       num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
-        raise NotImplementedError
+        model = load_pretrain_model(model, model_path='./conformer/mmdetection/pretrain_models/Conformer_small_patch16.pth')
     return model
 
 @register_model
@@ -125,7 +126,7 @@ def Conformer_small_patch32(pretrained=False, **kwargs):
     model = Conformer(patch_size=32, channel_ratio=4, embed_dim=384, depth=12,
                       num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
-        raise NotImplementedError
+        model = load_pretrain_model(model, model_path='./conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth')
     return model
 
 @register_model
@@ -133,7 +134,7 @@ def Conformer_base_patch16(pretrained=False, **kwargs):
     model = Conformer(patch_size=16, channel_ratio=6, embed_dim=576, depth=12,
                       num_heads=9, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
-        raise NotImplementedError
+        model = load_pretrain_model(model, model_path='./conformer/mmdetection/pretrain_models/Conformer_base_patch32.pth')
     return model
 
 @register_model
@@ -142,8 +143,9 @@ def Transconv_small_patch16(pretrained=False, **kwargs):
                       num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
         pre_trained_vit = mae_vit_base_patch16(pretrained=True)
+        pre_trained_conformer = Conformer_small_patch16(pretrained=True)        
         model = TransConv(patch_size=16, channel_ratio=4, embed_dim=768, depth=12,
                         num_heads=6, mlp_ratio=4, qkv_bias=True,
-                        pre_trained_vit=pre_trained_vit, finetune=False,
+                        pre_trained_vit=pre_trained_vit, finetune=False, pre_trained_conformer=pre_trained_conformer,
                         **kwargs)
     return model

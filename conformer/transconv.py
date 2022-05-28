@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
 
+from utils import freeze
 from timm.models.layers import DropPath, trunc_normal_
 from vision_transformer import VisionTransformer as ViT
 
@@ -257,23 +258,29 @@ class ConvTransBlock(nn.Module):
 
     def __init__(self, inplanes, outplanes, res_conv, stride, dw_stride, embed_dim, num_heads=12, mlp_ratio=4.,
                  qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.,
-                 last_fusion=False, num_med_block=0, groups=1, pre_trans_block=None):
+                 last_fusion=False, num_med_block=0, groups=1, pre_trans_block=None, pre_convtrans_block=None):
 
         super(ConvTransBlock, self).__init__()
         self.has_pre_trans_block = True if pre_trans_block is not None else False
         expansion = 4
-        self.cnn_block = ConvBlock(inplanes=inplanes, outplanes=outplanes, res_conv=res_conv, stride=stride, groups=groups)
+        self.cnn_block = ConvBlock(inplanes=inplanes, outplanes=outplanes, res_conv=res_conv, stride=stride, groups=groups) \
+            if pre_convtrans_block is None else pre_convtrans_block.cnn_block
 
         if last_fusion:
-            self.fusion_block = ConvBlock(inplanes=outplanes, outplanes=outplanes, stride=2, res_conv=True, groups=groups)
+            self.fusion_block = ConvBlock(inplanes=outplanes, outplanes=outplanes, stride=2, res_conv=True, groups=groups) \
+                if pre_convtrans_block is None else pre_convtrans_block.fusion_block
         else:
-            self.fusion_block = ConvBlock(inplanes=outplanes, outplanes=outplanes, groups=groups)
+            self.fusion_block = ConvBlock(inplanes=outplanes, outplanes=outplanes, groups=groups) \
+                if pre_convtrans_block is None else pre_convtrans_block.fusion_block
 
         if num_med_block > 0:
-            self.med_block = []
-            for i in range(num_med_block):
-                self.med_block.append(Med_ConvBlock(inplanes=outplanes, groups=groups))
-            self.med_block = nn.ModuleList(self.med_block)
+            if pre_convtrans_block is None:
+                self.med_block = []
+                for i in range(num_med_block):
+                    self.med_block.append(Med_ConvBlock(inplanes=outplanes, groups=groups))
+                self.med_block = nn.ModuleList(self.med_block)
+            else:
+                self.med_block = pre_convtrans_block.med_block
 
         self.squeeze_block = FCUDown(inplanes=outplanes // expansion, outplanes=embed_dim, dw_stride=dw_stride)
 
@@ -315,7 +322,8 @@ class ConvTransBlock(nn.Module):
 class TransConv(nn.Module):
 
     def __init__(self, patch_size=16, in_chans=3, num_classes=1000, base_channel=64, channel_ratio=4, num_med_block=0,
-                 embed_dim=768, depth=12, num_heads=12, mlp_ratio=4., qkv_bias=False, pre_trained_vit=None, finetune=False,
+                 embed_dim=768, depth=12, num_heads=12, mlp_ratio=4., qkv_bias=False,
+                 pre_trained_vit=None, finetune=False, pre_trained_conformer=None,
                  qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.):
 
         # Transformer
@@ -339,25 +347,25 @@ class TransConv(nn.Module):
         self.conv_cls_head = nn.Linear(int(256 * channel_ratio), num_classes)
 
         # Stem stage: get the feature maps by conv block (copied form resnet.py)
-        self.conv1 = nn.Conv2d(in_chans, 64, kernel_size=7, stride=2, padding=3, bias=False)  # 1 / 2 [112, 112]
-        self.bn1 = nn.BatchNorm2d(64)
+        self.conv1 = nn.Conv2d(in_chans, 64, kernel_size=7, stride=2, padding=3, bias=False) if pre_trained_conformer is None else pre_trained_conformer.conv1  # 1 / 2 [112, 112]
+        self.bn1 = nn.BatchNorm2d(64) if pre_trained_conformer is None else pre_trained_conformer.bn1
         self.act1 = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)  # 1 / 4 [56, 56]
 
         # 1 stage
         stage_1_channel = int(base_channel * channel_ratio)
         trans_dw_stride = patch_size // 4
-        self.conv_1 = ConvBlock(inplanes=64, outplanes=stage_1_channel, res_conv=True, stride=1)
+        self.conv_1 = ConvBlock(inplanes=64, outplanes=stage_1_channel, res_conv=True, stride=1) if pre_trained_conformer is None else pre_trained_conformer.conv_1
         if pre_trained_vit is not None:
             self.pos_drop = pre_trained_vit.pos_drop
             self.pos_embed = pre_trained_vit.pos_embed
             self.trans_patch_conv = pre_trained_vit.patch_embed
             self.trans_1 = pre_trained_vit.blocks[0] if pre_trained_vit is not None else None
         else:
-            self.trans_patch_conv = nn.Conv2d(64, embed_dim, kernel_size=trans_dw_stride, stride=trans_dw_stride, padding=0)
+            self.trans_patch_conv = nn.Conv2d(64, embed_dim, kernel_size=trans_dw_stride, stride=trans_dw_stride, padding=0) if pre_trained_conformer is None else pre_trained_conformer.trans_patch_conv
             self.trans_1 = TransformerBlock(dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
                                 qk_scale=qk_scale, drop=drop_rate, attn_drop=attn_drop_rate, drop_path=self.trans_dpr[0],
-                                )
+                                ) if pre_trained_conformer is None else pre_trained_conformer.trans_1
 
         # 2~4 stage
         init_stage = 2
@@ -368,7 +376,9 @@ class TransConv(nn.Module):
                         stage_1_channel, stage_1_channel, False, 1, dw_stride=trans_dw_stride, embed_dim=embed_dim,
                         num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                         drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=self.trans_dpr[i-1],
-                        num_med_block=num_med_block, pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None
+                        num_med_block=num_med_block,
+                        pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
+                        pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None
                     )
             )
 
@@ -385,7 +395,9 @@ class TransConv(nn.Module):
                         in_channel, stage_2_channel, res_conv, s, dw_stride=trans_dw_stride // 2, embed_dim=embed_dim,
                         num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                         drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=self.trans_dpr[i-1],
-                        num_med_block=num_med_block, pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None
+                        num_med_block=num_med_block,
+                        pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
+                        pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None
                     )
             )
 
@@ -404,7 +416,8 @@ class TransConv(nn.Module):
                         num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                         drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=self.trans_dpr[i-1],
                         num_med_block=num_med_block, last_fusion=last_fusion,
-                        pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None
+                        pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
+                        pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None
                     )
             )
         self.fin_stage = fin_stage
@@ -468,8 +481,3 @@ class TransConv(nn.Module):
         tran_cls = self.trans_cls_head(x_t[:, 0])
 
         return [conv_cls, tran_cls]
-
-
-def freeze(module):
-    for p in module.parameters():
-        p.requires_grad = True
