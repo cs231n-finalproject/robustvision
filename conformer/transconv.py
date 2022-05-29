@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
 
-from utils import freeze, log_ftr_map_histograms
+from utils import freeze, log_ftr_map_histograms, flag_pretrain, is_pretrain
 from timm.models.layers import DropPath, trunc_normal_
 from vision_transformer import VisionTransformer as ViT
 
@@ -410,24 +410,35 @@ class TransConv(nn.Module):
 
         self.has_pre_trained_vit = True if pre_trained_vit is not None else False
         self.has_pre_trained_conformer = True if pre_trained_conformer is not None else False
-        if pre_trained_vit is not None and finetune_vit is False:
-            freeze(pre_trained_vit)
-        if pre_trained_conformer is not None and finetune_conv is False:
-            freeze(pre_trained_conformer)
+        if pre_trained_vit is not None:
+            pre_trained_vit.apply(flag_pretrain)
+            if finetune_vit is False:
+                freeze(pre_trained_vit)
+        if pre_trained_conformer is not None:
+            pre_trained_conformer.apply(flag_pretrain)
+            if finetune_conv is False:
+                freeze(pre_trained_conformer)
 
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         assert depth % 3 == 0
 
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if pre_trained_vit is None else pre_trained_vit.cls_token
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if pre_trained_vit is None else flag_pretrain(pre_trained_vit.cls_token)
         self.trans_dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
         # Classifier head for transformer tower
-        self.trans_norm = nn.LayerNorm(embed_dim) if pre_trained_vit is None else pre_trained_vit.fc_norm
+        if pre_trained_vit is None:
+            self.trans_norm = nn.LayerNorm(embed_dim)
+        else:
+            self.global_pool = None if pre_trained_vit is None else flag_pretrain(pre_trained_vit.global_pool)
+            if self.global_pool:
+                self.trans_norm = flag_pretrain(pre_trained_vit.fc_norm)
+            else:
+                self.trans_norm = flag_pretrain(pre_trained_vit.norm)
         if pre_trained_vit is None:
             self.trans_cls_head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()  
         else:
-            self.trans_cls_head = pre_trained_vit.head
+            self.trans_cls_head = flag_pretrain(pre_trained_vit.head)
         # Classifier head for conv tower
         self.pooling = nn.AdaptiveAvgPool2d(1)
         self.conv_cls_head = nn.Linear(int(256 * channel_ratio), num_classes) if pre_trained_conformer is None else pre_trained_conformer.conv_cls_head
@@ -468,7 +479,7 @@ class TransConv(nn.Module):
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
                         pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
                         finetune_vit=finetune_vit, finetune_conv=finetune_conv,
-                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_down, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
+                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
                     )
             )
 
@@ -490,7 +501,7 @@ class TransConv(nn.Module):
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
                         pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
                         finetune_vit=finetune_vit, finetune_conv=finetune_conv,
-                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_down, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
+                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
                     )
             )
 
@@ -513,7 +524,7 @@ class TransConv(nn.Module):
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
                         pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
                         finetune_vit=finetune_vit, finetune_conv=finetune_conv,
-                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_down, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
+                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
                     )
             )
         self.fin_stage = fin_stage
@@ -524,9 +535,8 @@ class TransConv(nn.Module):
 
     def _init_weights(self, m):
         # don't initialize weight if it is initialized by pretrained model!
-        for param in m.parameters():
-            if not param.requires_grad:
-                return
+        if is_pretrain(m):
+            return
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
@@ -549,7 +559,6 @@ class TransConv(nn.Module):
 
 
     def forward(self, x, monitor=False, writer=None, global_step=None):
-        x_original = x
         B = x.shape[0]
 
         # pdb.set_trace()
@@ -580,7 +589,15 @@ class TransConv(nn.Module):
         conv_cls = self.conv_cls_head(x_p)
 
         # trans classification
-        x_t = self.trans_norm(x_t)
+        if self.has_pre_trained_vit:        
+            if self.global_pool:
+                x_t = x_t[:, 1:, :].mean(dim=1)  # global pool without cls token
+                tran_cls = self.trans_norm(x_t)
+            else:
+                x_t = self.trans_norm(x_t)
+                tran_cls = x_t[:, 0]
+        else:
+            x_t = self.trans_norm(x_t)
         tran_cls = self.trans_cls_head(x_t[:, 0])
 
         return [conv_cls, tran_cls]

@@ -242,6 +242,16 @@ def freeze(module):
         p.requires_grad = False
 
 
+def flag_pretrain(module, pretrained=True):
+    setattr(module, "pretrain", pretrained)
+    return module
+
+
+def is_pretrain(module):
+    is_pretrain = hasattr(module, 'pretrain') and module.pretrain
+    return is_pretrain
+
+
 def load_pretrain_model(model, model_path, finetune=False):
     checkpoint = torch.load(os.path.expanduser(model_path), map_location='cpu')
     if 'model' in checkpoint.keys():

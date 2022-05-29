@@ -342,7 +342,7 @@ def main(args):
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
             set_training_mode=args.finetune == '',  # keep in eval mode during finetuning
-            # max_step=5, # debug purpose
+            max_step=5, # debug purpose
             writer=writer,
             log_activation=args.monitor_activation
         )
