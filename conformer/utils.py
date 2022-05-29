@@ -248,8 +248,9 @@ def load_pretrain_model(model, model_path, finetune=False):
         checkpoint_model = checkpoint['model']
     else:
         checkpoint_model = checkpoint    
-    state_dict = model.state_dict()
+
     if finetune:
+        state_dict = model.state_dict()
         for k in ['head.weight', 'head.bias', 'head_dist.weight', 'head_dist.bias',
                 'trans_cls_head.weight', 'trans_cls_head.bias', 'conv_cls_head.weight', 'conv_cls_head.bias']:
             if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:

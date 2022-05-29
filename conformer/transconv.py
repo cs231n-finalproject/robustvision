@@ -415,8 +415,6 @@ class TransConv(nn.Module):
         if pre_trained_conformer is not None and finetune_conv is False:
             freeze(pre_trained_conformer)
 
-        self.pre_trained_vit = pre_trained_vit
-
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         assert depth % 3 == 0
@@ -425,7 +423,7 @@ class TransConv(nn.Module):
         self.trans_dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
         # Classifier head for transformer tower
-        self.trans_norm = nn.LayerNorm(embed_dim) if pre_trained_vit is None else pre_trained_vit.norm
+        self.trans_norm = nn.LayerNorm(embed_dim) if pre_trained_vit is None else pre_trained_vit.fc_norm
         if pre_trained_vit is None:
             self.trans_cls_head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()  
         else:
@@ -525,6 +523,10 @@ class TransConv(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
+        # don't initialize weight if it is initialized by pretrained model!
+        for param in m.parameters():
+            if not param.requires_grad:
+                return
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
@@ -580,7 +582,5 @@ class TransConv(nn.Module):
         # trans classification
         x_t = self.trans_norm(x_t)
         tran_cls = self.trans_cls_head(x_t[:, 0])
-
-        tran_cls = self.pre_trained_vit(x_original)
 
         return [conv_cls, tran_cls]

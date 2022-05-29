@@ -117,6 +117,7 @@ def evaluate(data_loader, model, device):
         # compute output
         with torch.cuda.amp.autocast():
             output = model(images)
+            # evaluate_tmp(output[1], target, model, 'cuda')
             # Conformer
             if isinstance(output, list):
                 loss_list = [criterion(o, target) / len(output)  for o in output]

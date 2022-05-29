@@ -5,6 +5,7 @@ from functools import partial
 # from timm.models.vision_transformer import VisionTransformer, _cfg
 
 from vision_transformer import VisionTransformer, _cfg
+from mae.models_vit import VisionTransformer as MAE_VisionTransformer
 from conformer import Conformer
 from transconv import TransConv
 from utils import load_pretrain_model
@@ -65,9 +66,10 @@ def deit_base_patch16_224(pretrained=False, **kwargs):
 
 @register_model
 def mae_vit_base_patch16(pretrained=False, **kwargs):
-    model = VisionTransformer(
+    model = MAE_VisionTransformer(
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), num_classes=1000, drop_path_rate=0.1,
+        global_pool=True, **kwargs)
     model.default_cfg = _cfg()
     if pretrained:
         # checkpoint = torch.hub.load_state_dict_from_url(
@@ -80,9 +82,10 @@ def mae_vit_base_patch16(pretrained=False, **kwargs):
 
 @register_model
 def mae_vit_large_patch16(pretrained=False, **kwargs):
-    model = VisionTransformer(
+    model = MAE_VisionTransformer(
         patch_size=16, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),  num_classes=1000, drop_path_rate=0.1,
+        global_pool=True, **kwargs)
     model.default_cfg = _cfg()
     if pretrained:
         checkpoint = torch.hub.load_state_dict_from_url(
@@ -94,9 +97,10 @@ def mae_vit_large_patch16(pretrained=False, **kwargs):
 
 @register_model
 def mae_vit_huge_patch14(pretrained=False, **kwargs):
-    model = VisionTransformer(
+    model = MAE_VisionTransformer(
         patch_size=14, embed_dim=1280, depth=32, num_heads=16, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),  num_classes=1000, drop_path_rate=0.1,
+        global_pool=True, **kwargs)
     model.default_cfg = _cfg()
     if pretrained:
         checkpoint = torch.hub.load_state_dict_from_url(
