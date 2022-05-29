@@ -1,5 +1,10 @@
-# robustvision
-robustvision
+# Robustvision
+
+In the past 2 years, self-supervised pre-training for vision representation [1] [10] has outperformed supervised pretraining [11] in computer vision tasks such as image classification, inspired by transformer-based pre-trained models in NLP. Transformer-based models used in NLP have shown promising results in computer vision benchmarks in fields such as Object Detection [3], Video Classification [4], Image Classification [5] and Image Generation [6]. Transformer-based methods showed the power of learning global representation of the images. However, CNN models still have the advantage of learning local feature representation which is important for instance segmentation tasks. There are some recent works combining CNN and Transformer (a.k.a., Conformer) which could potentially lead to a robust vision model leveraging the best of both worlds [2].
+This methodology is similar to the Two-Streams Hypothesis in Neuroscience, which claims that the brain has a dorsal and ventral pathway [12] [13] which separately process spatial, location-based information and recognition / identification respectively. The corollaries to current deep learning approaches would be transformer-based models for the recognition, classification tasks, and CNN-based models for spatial locality. Following this path, the goal of this project is to find a single architecture combining self-supervised / supervised pre-trained vision models and variations of the Conformer architecture to Object Detection, Instance Segmentation and Style Transformation, and conclude a solution of one robust vision model that works across different tasks.
+
+<img width="913" alt="image" src="https://user-images.githubusercontent.com/28990806/170882276-5c4da835-2748-48b8-b4a7-8cfea30f9a2a.png">
+
 
 
 # Convergence of fused two towers:
