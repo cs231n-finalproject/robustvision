@@ -283,16 +283,17 @@ def load_pretrain_model(model, model_path, finetune=False):
 
 def acc(output, target):
     target = torch.argmax(target, dim=-1)
+    acc1_head1, acc1_head2 = None, None
     if isinstance(output, list):
         # Conformer
-        # acc1_head1 = accuracy(output[0], target, topk=(1,))[0]
-        # acc1_head2 = accuracy(output[1], target, topk=(1,))[0]
+        acc1_head1 = accuracy(output[0], target, topk=(1,))[0]
+        acc1_head2 = accuracy(output[1], target, topk=(1,))[0]
         acc1, acc5 = accuracy(output[0] + output[1], target, topk=(1, 5))
     else:
         # others
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
     acc1
-    return acc1, acc5
+    return acc1, acc5, acc1_head1, acc1_head2
 
 
 def log_metrics(writer, metrics, epoch):

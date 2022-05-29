@@ -28,6 +28,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         avg_loss = 0.0
         avg_acc1 = 0.0
         avg_acc5 = 0.0
+        avg_acc1_head1 = 0.0
+        avg_acc1_head2 = 0.0
     # TODO fix this for finetuning
     model.train(set_training_mode)
     criterion.train()
@@ -57,16 +59,21 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         # visualization - training
         if writer is not None and global_rank == 0:
             avg_loss += (loss_value - avg_loss) / (local_step + 1)
-            acc1, acc5 = utils.acc(outputs, targets)
+            acc1, acc5, acc1_head1, acc1_head2 = utils.acc(outputs, targets)
             avg_acc1 += (acc1.item() - avg_acc1) / (local_step + 1)
             avg_acc5 += (acc5.item() - avg_acc5) / (local_step + 1)
+            avg_acc1_head2 += (acc1_head1.item() - avg_acc1_head2) / (local_step + 1)
+            avg_acc1_head2 += (acc1_head2.item() - avg_acc1_head2) / (local_step + 1)
             global_step = global_start_step + local_step
             if global_step == 0:
                 writer.add_graph(model, input_to_model=samples, verbose=False) 
             writer.add_scalar("Loss", avg_loss, global_step)
             writer.add_scalar("Accuracy1", avg_acc1, global_step)
             writer.add_scalar("Accuracy5", avg_acc5, global_step)
-            writer.add_scalars('Summary', {'Loss': avg_loss, 'Accuracy1': avg_acc1, 'Accuracy5': avg_acc5}, global_step)
+            writer.add_scalar("Accuracy1_Head1", avg_acc1_head1, global_step)
+            writer.add_scalar("Accuracy1_Head2", avg_acc1_head2, global_step)
+            writer.add_scalars('Summary', {'Loss': avg_loss, 'Accuracy1': avg_acc1, 'Accuracy5': avg_acc5, \
+                'Accuracy1_Head1': avg_acc1_head1, 'Accuracy1_Head2': avg_acc1_head2}, global_step)
             local_step += 1
 
         if not math.isfinite(loss_value):

@@ -26,7 +26,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
-    parser.add_argument('--batch-size', default=16, type=int)
+    parser.add_argument('--batch-size', default=24, type=int)
     parser.add_argument('--epochs', default=10, type=int)
 
     # Model parameters
@@ -127,7 +127,7 @@ def get_args_parser():
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # Dataset parameters
-    parser.add_argument('--data-path', default='~/Dataset/ImageNet_ILSVRC2012/', type=str,
+    parser.add_argument('--data-path', default='~/Dataset/ImageNet_ILSVRC2012_FULL/', type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'CIFAR10', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -342,7 +342,7 @@ def main(args):
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
             set_training_mode=args.finetune == '',  # keep in eval mode during finetuning
-            max_step=5, # debug purpose
+            # max_step=5, # debug purpose
             writer=writer,
             log_activation=args.monitor_activation
         )
