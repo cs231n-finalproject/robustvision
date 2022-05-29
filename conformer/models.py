@@ -70,11 +70,12 @@ def mae_vit_base_patch16(pretrained=False, **kwargs):
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     model.default_cfg = _cfg()
     if pretrained:
-        checkpoint = torch.hub.load_state_dict_from_url(
-            url="https://dl.fbaipublicfiles.com/mae/finetune/mae_finetuned_vit_base.pth",
-            map_location="cpu", check_hash=True
-        )
-        model.load_state_dict(checkpoint["model"], strict=False)        
+        # checkpoint = torch.hub.load_state_dict_from_url(
+        #     url="https://dl.fbaipublicfiles.com/mae/finetune/mae_finetuned_vit_base.pth",
+        #     map_location="cpu", check_hash=True
+        # )
+        # model.load_state_dict(checkpoint["model"], strict=False)
+        model = load_pretrain_model(model, model_path='~/robustvision/conformer/mae/checkpoints/mae_finetuned_vit_base.pth')
     return model
 
 @register_model
@@ -118,7 +119,7 @@ def Conformer_small_patch16(pretrained=False, **kwargs):
     model = Conformer(patch_size=16, channel_ratio=4, embed_dim=384, depth=12,
                       num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
-        model = load_pretrain_model(model, model_path='./conformer/mmdetection/pretrain_models/Conformer_small_patch16.pth')
+        model = load_pretrain_model(model, model_path='~/robustvision/conformer/mmdetection/pretrain_models/Conformer_small_patch16.pth')
     return model
 
 @register_model
@@ -126,7 +127,7 @@ def Conformer_small_patch32(pretrained=False, **kwargs):
     model = Conformer(patch_size=32, channel_ratio=4, embed_dim=384, depth=12,
                       num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
-        model = load_pretrain_model(model, model_path='./conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth')
+        model = load_pretrain_model(model, model_path='~/robustvision/conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth')
     return model
 
 @register_model
@@ -134,7 +135,7 @@ def Conformer_base_patch16(pretrained=False, **kwargs):
     model = Conformer(patch_size=16, channel_ratio=6, embed_dim=576, depth=12,
                       num_heads=9, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
-        model = load_pretrain_model(model, model_path='./conformer/mmdetection/pretrain_models/Conformer_base_patch32.pth')
+        model = load_pretrain_model(model, model_path='~/robustvision/conformer/mmdetection/pretrain_models/Conformer_base_patch32.pth')
     return model
 
 @register_model

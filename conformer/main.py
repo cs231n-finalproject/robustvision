@@ -20,6 +20,7 @@ from engine import train_one_epoch, evaluate
 from samplers import RASampler
 import utils
 import models
+from torch.utils.tensorboard import SummaryWriter
 
 # from fvcore.nn import FlopCountAnalysis
 
@@ -126,7 +127,7 @@ def get_args_parser():
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # Dataset parameters
-    parser.add_argument('--data-path', default='~/Dataset/ImageNet_ILSVRC2012_FULL/', type=str,
+    parser.add_argument('--data-path', default='~/Dataset/ImageNet_ILSVRC2012/', type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'CIFAR10', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -137,7 +138,7 @@ def get_args_parser():
     parser.add_argument('--finetune', default='', help='finetune from checkpoint')
     parser.add_argument('--pretrained', type=bool, default=True, help='True to load model with pretrained')    
 
-    parser.add_argument('--evaluate-freq', type=int, default=1, help='frequency of perform evaluation (default: 5)')
+    parser.add_argument('--evaluate_freq', type=int, default=1, help='frequency of perform evaluation (default: 1)')  
     parser.add_argument('--output_dir', default='',
                         help='path where to save, empty for no saving')
     parser.add_argument('--device', default='cuda',
@@ -153,6 +154,10 @@ def get_args_parser():
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem',
                         help='')
     parser.set_defaults(pin_mem=True)
+
+    # tensorboard logging
+    parser.add_argument('--monitor_weight', type=bool, default=True, help='True to log weight histograms')  
+    parser.add_argument('--monitor_activation', type=bool, default=True, help='True to log feature map histograms')  
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -326,6 +331,8 @@ def main(args):
     print("Start training")
     start_time = time.time()
     max_accuracy = 0.0
+    if global_rank == 0:
+        writer = SummaryWriter()    
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -334,7 +341,10 @@ def main(args):
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
-            set_training_mode=args.finetune == ''  # keep in eval mode during finetuning
+            set_training_mode=args.finetune == '',  # keep in eval mode during finetuning
+            max_step=5, # debug purpose
+            writer=writer,
+            log_activation=args.monitor_activation
         )
 
         lr_scheduler.step(epoch)
@@ -363,6 +373,11 @@ def main(args):
             if args.output_dir and utils.is_main_process():
                 with (output_dir / "log.txt").open("a") as f:
                     f.write(json.dumps(log_stats) + "\n")
+
+            # visualization - training
+            utils.log_metrics(writer, {**{f'train_{k}': v for k, v in train_stats.items()}, **{f'test_{k}': v for k, v in test_stats.items()}}, epoch)
+            if args.monitor_weight:
+                utils.log_weight_histograms(model, writer, epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

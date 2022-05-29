@@ -23,11 +23,11 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export OMP_NUM_THREADS=1
 GPU_NUM=8
 
-CONFIG="./conformer/mmdetection/configs/faster_rcnn/faster_rcnn_conformer_small_patch32_fpn_1x_coco.py"
-WORK_DIR='./conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800'
+CONFIG='~/robustvision/conformer/mmdetection/configs/faster_rcnn/faster_rcnn_conformer_small_patch32_fpn_1x_coco.py'
+WORK_DIR='~/robustvision/conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800'
 
 # Train
-python3 -m torch.distributed.launch --nproc_per_node=${GPU_NUM} --master_port=50040 --use_env ./conformer/mmdetection/tools/train.py --config ${CONFIG} --work-dir ${WORK_DIR} --gpus ${GPU_NUM}  --launcher pytorch --cfg-options model.pretrained='./conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth' model.backbone.patch_size=32
+python3 -m torch.distributed.launch --nproc_per_node=${GPU_NUM} --master_port=50040 --use_env ./conformer/mmdetection/tools/train.py --config ${CONFIG} --work-dir ${WORK_DIR} --gpus ${GPU_NUM}  --launcher pytorch --cfg-options model.pretrained='~/robustvision/conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth' model.backbone.patch_size=32
 
 # Test on multiple cards
 python -m torch.distributed.launch --nproc_per_node=${GPU_NUM} --master_port=50040 --use_env ./tools/test.py ${CONFIG} ${WORK_DIR}/latest.pth --launcher pytorch  --eval bbox

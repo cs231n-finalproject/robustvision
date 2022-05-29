@@ -4,9 +4,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
 
-from utils import freeze
+from utils import freeze, log_ftr_map_histograms
 from timm.models.layers import DropPath, trunc_normal_
 from vision_transformer import VisionTransformer as ViT
+
 
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
@@ -414,6 +415,8 @@ class TransConv(nn.Module):
         if pre_trained_conformer is not None and finetune_conv is False:
             freeze(pre_trained_conformer)
 
+        self.pre_trained_vit = pre_trained_vit
+
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         assert depth % 3 == 0
@@ -421,11 +424,15 @@ class TransConv(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if pre_trained_vit is None else pre_trained_vit.cls_token
         self.trans_dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
-        # Classifier head
-        self.trans_norm = nn.LayerNorm(embed_dim)
-        self.trans_cls_head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
+        # Classifier head for transformer tower
+        self.trans_norm = nn.LayerNorm(embed_dim) if pre_trained_vit is None else pre_trained_vit.norm
+        if pre_trained_vit is None:
+            self.trans_cls_head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()  
+        else:
+            self.trans_cls_head = pre_trained_vit.head
+        # Classifier head for conv tower
         self.pooling = nn.AdaptiveAvgPool2d(1)
-        self.conv_cls_head = nn.Linear(int(256 * channel_ratio), num_classes)
+        self.conv_cls_head = nn.Linear(int(256 * channel_ratio), num_classes) if pre_trained_conformer is None else pre_trained_conformer.conv_cls_head
 
         # Stem stage: get the feature maps by conv block (copied form resnet.py)
         self.conv1 = nn.Conv2d(in_chans, 64, kernel_size=7, stride=2, padding=3, bias=False) if pre_trained_conformer is None else pre_trained_conformer.conv1  # 1 / 2 [112, 112]
@@ -539,7 +546,8 @@ class TransConv(nn.Module):
         return {'cls_token'}
 
 
-    def forward(self, x):
+    def forward(self, x, monitor=False, writer=None, global_step=None):
+        x_original = x
         B = x.shape[0]
 
         # pdb.set_trace()
@@ -562,6 +570,8 @@ class TransConv(nn.Module):
         # 2 ~ final 
         for i in range(2, self.fin_stage):
             x, x_t = eval('self.conv_trans_' + str(i))(x, x_t)
+            if monitor:
+                log_ftr_map_histograms(writer, x, x_t, i, global_step)            
 
         # conv classification
         x_p = self.pooling(x).flatten(1)
@@ -570,5 +580,7 @@ class TransConv(nn.Module):
         # trans classification
         x_t = self.trans_norm(x_t)
         tran_cls = self.trans_cls_head(x_t[:, 0])
+
+        tran_cls = self.pre_trained_vit(x_original)
 
         return [conv_cls, tran_cls]

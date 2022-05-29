@@ -8,7 +8,7 @@ workflow = [('train', 1)]
 model = dict(
     type='FasterRCNN',
     pretrained=
-    './conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth',
+    '~/robustvision/conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth',
     backbone=dict(
         type='Conformer',
         embed_dim=384,
@@ -233,5 +233,5 @@ lr_config = dict(
     step=[8, 11])
 total_epochs = 12
 find_unused_parameters = True
-work_dir = './conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800'
+work_dir = '~/robustvision/conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800'
 gpu_ids = range(0, 1)

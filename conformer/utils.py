@@ -11,6 +11,7 @@ import datetime
 
 import torch
 import torch.distributed as dist
+from timm.utils import accuracy
 
 
 class SmoothedValue(object):
@@ -238,18 +239,19 @@ def init_distributed_mode(args):
 
 def freeze(module):
     for p in module.parameters():
-        p.requires_grad = True
+        p.requires_grad = False
 
 
-def load_pretrain_model(model, model_path):
-        checkpoint = torch.load(model_path, map_location='cpu')
-        if 'model' in checkpoint.keys():
-            checkpoint_model = checkpoint['model']
-        else:
-            checkpoint_model = checkpoint    
-        state_dict = model.state_dict()
+def load_pretrain_model(model, model_path, finetune=False):
+    checkpoint = torch.load(os.path.expanduser(model_path), map_location='cpu')
+    if 'model' in checkpoint.keys():
+        checkpoint_model = checkpoint['model']
+    else:
+        checkpoint_model = checkpoint    
+    state_dict = model.state_dict()
+    if finetune:
         for k in ['head.weight', 'head.bias', 'head_dist.weight', 'head_dist.bias',
-                  'trans_cls_head.weight', 'trans_cls_head.bias', 'conv_cls_head.weight', 'conv_cls_head.bias']:
+                'trans_cls_head.weight', 'trans_cls_head.bias', 'conv_cls_head.weight', 'conv_cls_head.bias']:
             if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
@@ -274,5 +276,40 @@ def load_pretrain_model(model, model_path):
             new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
             checkpoint_model['pos_embed'] = new_pos_embed
 
-        model.load_state_dict(checkpoint_model, strict=False)
-        return model
+    model.load_state_dict(checkpoint_model, strict=False)
+    return model
+
+
+def acc(output, target):
+    target = torch.argmax(target, dim=-1)
+    if isinstance(output, list):
+        # Conformer
+        # acc1_head1 = accuracy(output[0], target, topk=(1,))[0]
+        # acc1_head2 = accuracy(output[1], target, topk=(1,))[0]
+        acc1, acc5 = accuracy(output[0] + output[1], target, topk=(1, 5))
+    else:
+        # others
+        acc1, acc5 = accuracy(output, target, topk=(1, 5))
+    acc1
+    return acc1, acc5
+
+
+def log_metrics(writer, metrics, epoch):
+    for k, v in metrics.items():
+        writer.add_scalar(k, v, epoch)
+    writer.add_scalars('Summary', metrics, epoch)
+
+
+def log_weight_histograms(model, writer, epoch):
+    layer = 'conv_trans_'
+    for name, param in model.named_parameters(): 
+        if layer in name and 'weight' in name and param.requires_grad == True:
+            flattened_weights = param.flatten()
+            writer.add_histogram(name, flattened_weights, global_step=epoch, bins='tensorflow')
+
+
+def log_ftr_map_histograms(writer, x, x_t, i, global_step):
+    flattened_x = x.flatten()
+    flattened_x_t = x_t.flatten()
+    writer.add_histogram(f"conv_trans_{i}.feature_map.conv_tower", flattened_x, global_step=global_step, bins='tensorflow')
+    writer.add_histogram(f"conv_trans_{i}.feature_map.trans_tower", flattened_x_t, global_step=global_step, bins='tensorflow')
