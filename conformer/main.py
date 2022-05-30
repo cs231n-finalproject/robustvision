@@ -31,9 +31,10 @@ def get_args_parser():
     parser.add_argument('--epochs', default=10, type=int)
 
     # Model parameters
-    parser.add_argument('--model', default='Conformer_small_patch16', type=str, metavar='MODEL',
-                        help='Name of model to train', choices=['Conformer_small_patch16', 'deit_base_patch16_224', 'mae_vit_huge_patch14', \
-                        'mae_vit_base_patch16', 'Transconv_small_patch16'])
+    parser.add_argument('--model', default='Transconv_small_patch16', type=str, metavar='MODEL',
+                        help='Name of model to train', choices=['Conformer_small_patch16', 'Conformer_base_patch16', \
+                             'deit_base_patch16_224', 'mae_vit_huge_patch14', \
+                             'mae_vit_base_patch16', 'Transconv_small_patch16', 'Transconv_base_patch16'])
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
@@ -332,8 +333,7 @@ def main(args):
     print("Start training")
     start_time = time.time()
     max_accuracy = 0.0
-    if global_rank == 0:
-        writer = SummaryWriter()    
+    writer = SummaryWriter()    
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -343,7 +343,7 @@ def main(args):
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
             set_training_mode=args.finetune == '',  # keep in eval mode during finetuning
-            max_step=5, # debug purpose
+            # max_step=5, # debug purpose
             writer=writer,
             log_activation=args.monitor_activation
         )

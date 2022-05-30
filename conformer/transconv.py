@@ -439,12 +439,19 @@ class TransConv(nn.Module):
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         assert depth % 3 == 0
 
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if pre_trained_vit is None else pre_trained_vit.cls_token
+        if pre_trained_vit is None:
+            if pre_trained_conformer is None:
+                self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+                trunc_normal_(self.cls_token, std=.02)
+            else:
+                self.cls_token = flag_pretrain(pre_trained_conformer.cls_token)
+        else:
+            self.cls_token = pre_trained_vit.cls_token
         self.trans_dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
         # Classifier head for transformer tower
         if pre_trained_vit is None:
-            self.trans_norm = nn.LayerNorm(embed_dim)
+            self.trans_norm = nn.LayerNorm(embed_dim) if pre_trained_conformer is None else pre_trained_conformer.trans_norm
         else:
             self.global_pool = None if pre_trained_vit is None else pre_trained_vit.global_pool
             if self.global_pool:
@@ -452,7 +459,10 @@ class TransConv(nn.Module):
             else:
                 self.trans_norm = pre_trained_vit.norm
         if pre_trained_vit is None:
-            self.trans_cls_head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()  
+            if pre_trained_conformer is None:
+                self.trans_cls_head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
+            else:
+                self.trans_cls_head = pre_trained_conformer.trans_cls_head
         else:
             self.trans_cls_head = pre_trained_vit.head
         # Classifier head for conv tower
@@ -495,7 +505,8 @@ class TransConv(nn.Module):
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
                         pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
                         finetune_vit=finetune_vit, finetune_conv=finetune_conv,
-                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
+                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up,
+                        up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
                     )
             )
 
@@ -517,7 +528,8 @@ class TransConv(nn.Module):
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
                         pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
                         finetune_vit=finetune_vit, finetune_conv=finetune_conv,
-                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
+                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up,
+                        up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
                     )
             )
 
@@ -540,12 +552,11 @@ class TransConv(nn.Module):
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
                         pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
                         finetune_vit=finetune_vit, finetune_conv=finetune_conv,
-                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up, up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
+                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up,
+                        up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
                     )
             )
         self.fin_stage = fin_stage
-
-        trunc_normal_(self.cls_token, std=.02)
 
         self.apply(self._init_weights)
 
@@ -588,10 +599,10 @@ class TransConv(nn.Module):
             x_t = torch.cat((cls_tokens, x_t), dim=1)
             x_t = x_t + self.pos_embed
             x_t = self.pos_drop(x_t)
-        else:       
+        else:
             x_t = self.trans_patch_conv(x_base).flatten(2).transpose(1, 2)
             x_t = torch.cat([cls_tokens, x_t], dim=1)
-        x = self.conv_1(x_base, return_x_2=False)            
+        x = self.conv_1(x_base, return_x_2=False)
         x_t = self.trans_1(x_t)
 
         # 2 ~ final 

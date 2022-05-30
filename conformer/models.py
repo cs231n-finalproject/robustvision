@@ -147,8 +147,8 @@ def Conformer_base_patch16(pretrained=False, **kwargs):
 @register_model
 def Transconv_small_patch16(pretrained=False, **kwargs):
     if pretrained:
-        # pre_trained_vit = mae_vit_base_patch16(pretrained=True)
-        pre_trained_vit = None
+        pre_trained_vit = mae_vit_base_patch16(pretrained=True)
+        # pre_trained_vit = None  # uncomment to initialize only conv tower
         pre_trained_conformer = Conformer_small_patch16(pretrained=True)        
         model = TransConv(patch_size=16, channel_ratio=4, embed_dim=768 if pre_trained_vit is not None else 384, depth=12,
                         num_heads=6, mlp_ratio=4, qkv_bias=True,
