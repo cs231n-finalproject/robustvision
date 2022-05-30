@@ -27,7 +27,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
-    parser.add_argument('--batch-size', default=16, type=int)
+    parser.add_argument('--batch-size', default=180, type=int)
     parser.add_argument('--epochs', default=10, type=int)
 
     # Model parameters
@@ -129,7 +129,7 @@ def get_args_parser():
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # Dataset parameters
-    parser.add_argument('--data-path', default=os.path.expanduser('~/Dataset/ImageNet_ILSVRC2012/'), type=str,
+    parser.add_argument('--data-path', default=os.path.expanduser('~/Dataset/ImageNet_ILSVRC2012_FULL/'), type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'CIFAR10', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -158,8 +158,7 @@ def get_args_parser():
     parser.set_defaults(pin_mem=True)
 
     # tensorboard logging
-    parser.add_argument('--monitor_weight', type=bool, default=True, help='True to log weight histograms')  
-    parser.add_argument('--monitor_activation', type=bool, default=True, help='True to log feature map histograms')  
+    parser.add_argument('--log_tensorboard', type=bool, default=True, help='True to log feature map histograms')  
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -284,7 +283,7 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
@@ -333,7 +332,7 @@ def main(args):
     print("Start training")
     start_time = time.time()
     max_accuracy = 0.0
-    writer = SummaryWriter()    
+    writer = SummaryWriter() if args.log_tensorboard else None
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -345,7 +344,7 @@ def main(args):
             set_training_mode=args.finetune == '',  # keep in eval mode during finetuning
             # max_step=5, # debug purpose
             writer=writer,
-            log_activation=args.monitor_activation
+            log_tensorborad=args.log_tensorboard
         )
 
         lr_scheduler.step(epoch)
@@ -375,9 +374,9 @@ def main(args):
                 with (output_dir / "log.txt").open("a") as f:
                     f.write(json.dumps(log_stats) + "\n")
 
-            # visualization - training
-            utils.log_metrics(writer, {**{f'train_{k}': v for k, v in train_stats.items()}, **{f'test_{k}': v for k, v in test_stats.items()}}, epoch)
-            if args.monitor_weight:
+            if args.log_tensorboard:
+                # visualization - training
+                utils.log_metrics(writer, {**{f'train_{k}': v for k, v in train_stats.items()}, **{f'test_{k}': v for k, v in test_stats.items()}}, epoch)
                 utils.log_weight_histograms(model, writer, epoch)
 
     total_time = time.time() - start_time

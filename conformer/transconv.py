@@ -384,14 +384,15 @@ class ConvTransBlock(nn.Module):
         return x_t_fused
 
     def forward(self, x, x_t):
-        x, x2 = self.cnn_block(x)
-        _, _, H, W = x2.shape
 
         if self.has_pre_trans_block and not self.finetune_vit:
+            x = self.cnn_block(x, return_x_2=False)           
             x_t = self.trans_block(x_t)
         else:
+            x, x2 = self.cnn_block(x)           
             x_st = self.squeeze_block(x2, x_t)
             x_t = self.trans_block(self.additive(x_st, x_t))
+        _, _, H, W = x.shape  
 
         if self.num_med_block > 0:
             for m in self.med_block:

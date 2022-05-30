@@ -75,7 +75,7 @@ python -m torch.distributed.launch --master_port 50130 --nproc_per_node=8 --use_
                                    --epochs 300
 
 
-python3 -m torch.distributed.launch --master_port 50130 --nproc_per_node=2 --use_env ./conformer/main.py \
+python3 -m torch.distributed.launch --master_port 50130 --nproc_per_node=6 --use_env ./conformer/main.py \
                                    --model Transconv_small_patch16 \
                                    --data-set IMNET \
                                    --batch-size 128 \

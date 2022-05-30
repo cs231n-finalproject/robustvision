@@ -17,14 +17,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
-                    set_training_mode=True, writer=None, max_step=math.inf, log_activation=False
+                    set_training_mode=True, writer=None, max_step=math.inf, log_tensorborad=False
                     ):
     # track the training progress
     global_rank = utils.get_rank()
-    steps_per_epoch = min(8640, max_step)
-    if global_rank == 0:
+    local_step = 0        
+    if log_tensorborad:
+        # if global_rank == 0:    
+        steps_per_epoch = min(8640, max_step)
         global_start_step = steps_per_epoch * epoch
-        local_step = 0
         avg_loss = 0.0
         avg_acc1 = 0.0
         avg_acc5 = 0.0
@@ -46,8 +47,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             samples, targets = mixup_fn(samples, targets)
 
         with torch.cuda.amp.autocast():
-            monitor = log_activation and local_step % ((steps_per_epoch // 1000) + 1) == 0
-            outputs = model(samples, monitor, writer, global_start_step + local_step)
+            if log_tensorborad:
+                monitor = log_tensorborad and local_step % ((steps_per_epoch // 1000) + 1) == 0
+                outputs = model(samples, monitor, writer, global_start_step + local_step)
+            else:
+                outputs = model(samples)
             if isinstance(outputs, list):
                 loss_list = [criterion(o, targets) / len(outputs) for o in outputs]
                 loss = sum(loss_list)
@@ -57,7 +61,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         loss_value = loss.item()
 
         # visualization - training
-        if writer is not None and global_rank == 0:
+        if log_tensorborad and writer is not None and global_rank == 0:
             avg_loss += (loss_value - avg_loss) / (local_step + 1)
             acc1, acc5, acc1_head1, acc1_head2 = utils.acc(outputs, targets)
             avg_acc1 += (acc1.item() - avg_acc1) / (local_step + 1)
@@ -65,16 +69,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             avg_acc1_head2 += (acc1_head1.item() - avg_acc1_head2) / (local_step + 1)
             avg_acc1_head2 += (acc1_head2.item() - avg_acc1_head2) / (local_step + 1)
             global_step = global_start_step + local_step
-            if global_step == 0:
-                writer.add_graph(model, input_to_model=samples, verbose=False) 
+            # if global_step == 0:
+            #     writer.add_graph(model, input_to_model=samples, verbose=False) 
             writer.add_scalar("Loss", avg_loss, global_step)
             writer.add_scalar("Accuracy1", avg_acc1, global_step)
             writer.add_scalar("Accuracy5", avg_acc5, global_step)
             writer.add_scalar("Accuracy1_Head1", avg_acc1_head1, global_step)
             writer.add_scalar("Accuracy1_Head2", avg_acc1_head2, global_step)
-            writer.add_scalars('Summary', {'Loss': avg_loss, 'Accuracy1': avg_acc1, 'Accuracy5': avg_acc5, \
+            writer.add_scalars('Summary', {'Loss': avg_loss, 'Accuracy1': avg_acc1, 'Accuracy5': avg_acc5,
                 'Accuracy1_Head1': avg_acc1_head1, 'Accuracy1_Head2': avg_acc1_head2}, global_step)
-            local_step += 1
 
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
@@ -98,6 +101,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             metric_logger.update(loss=loss_value)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
+        local_step += 1
         if local_step >= max_step:
             break
 
