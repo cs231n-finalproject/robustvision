@@ -19,9 +19,9 @@ At present, we use the feature maps of different stages in the CNN branch as the
 We provide some config files in `configs/`. And anyone can use Conformer to replace the backbone in the existing detection algorithms. We take the `Faster R-CNN` algorithm as an example to illustrate how to perform training and inference:
 
 ```bash
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5
 export OMP_NUM_THREADS=1
-GPU_NUM=8
+GPU_NUM=6
 
 CONFIG='~/robustvision/conformer/mmdetection/configs/faster_rcnn/faster_rcnn_conformer_small_patch32_fpn_1x_coco.py'
 WORK_DIR='~/robustvision/conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800'

@@ -327,11 +327,13 @@ class ConvTransBlock(nn.Module):
                 additive_fusion=additive_fusion_up, up_shape=up_shape)
             if pre_convtrans_block is not None:
                 self.fusion_block.load_state_dict(pre_convtrans_block.fusion_block.state_dict(), strict=False)
+                self.fusion_block.apply(flag_pretrain)
         else:
             self.fusion_block = ConvBlock(inplanes=outplanes, outplanes=outplanes, groups=groups, \
                 additive_fusion=additive_fusion_up, up_shape=up_shape)
             if pre_convtrans_block is not None:
                     self.fusion_block.load_state_dict(pre_convtrans_block.fusion_block.state_dict(), strict=False)
+                    self.fusion_block.apply(flag_pretrain)
 
         if num_med_block > 0:
             if pre_convtrans_block is None:
@@ -342,16 +344,25 @@ class ConvTransBlock(nn.Module):
             else:
                 self.med_block = pre_convtrans_block.med_block
 
-        self.squeeze_block = FCUDown(inplanes=outplanes // expansion, outplanes=embed_dim, dw_stride=dw_stride)
+        # only when transformer tower is not initialized from ViT and conv tower is from conformer, go with conformer
+        if pre_convtrans_block is not None and pre_trans_block is None:
+            self.squeeze_block = pre_convtrans_block.squeeze_block
+        else:
+            self.squeeze_block = FCUDown(inplanes=outplanes // expansion, outplanes=embed_dim, dw_stride=dw_stride)
 
-        self.expand_block = FCUUp(inplanes=embed_dim, outplanes=outplanes // expansion, up_stride=dw_stride)
+        # only when transformer tower is not initialized from ViT and conv tower is from conformer, go with conformer
+        if pre_convtrans_block is not None and pre_trans_block is None:
+            self.expand_block = pre_convtrans_block.expand_block
+        else:
+            self.expand_block = FCUUp(inplanes=embed_dim, outplanes=outplanes // expansion, up_stride=dw_stride)
 
         if self.has_pre_trans_block:
             self.trans_block = pre_trans_block
         else:
             self.trans_block = TransformerBlock(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate)
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate) \
+                    if pre_convtrans_block is None else pre_convtrans_block.trans_block
 
         self.additive_fusion = additive_fusion_down
         if self.additive_fusion:
@@ -387,8 +398,13 @@ class ConvTransBlock(nn.Module):
                 x = m(x)
 
         if self.has_pre_conv_block and not self.finetune_conv:
-            pass # x = x
+            #TODO design choice, fuse or not if conv tower does not allow finetune, No for now
+            # x_t_r = self.expand_block(x_t, H // self.dw_stride, W // self.dw_stride)
+            # x = self.fusion_block(x, x_t_r, return_x_2=False)
+            # don't fuse with transformer block            
+            x = self.fusion_block(x, None, return_x_2=False)
         else:
+            # fuse with transformer block
             # [N, 197, 384] -> [N, 64, 56, 56]
             x_t_r = self.expand_block(x_t, H // self.dw_stride, W // self.dw_stride)
             # [N, 256, 56, 56] + [N, 64, 56, 56] -> [N, 256, 56, 56]
@@ -423,22 +439,22 @@ class TransConv(nn.Module):
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         assert depth % 3 == 0
 
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if pre_trained_vit is None else flag_pretrain(pre_trained_vit.cls_token)
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if pre_trained_vit is None else pre_trained_vit.cls_token
         self.trans_dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
         # Classifier head for transformer tower
         if pre_trained_vit is None:
             self.trans_norm = nn.LayerNorm(embed_dim)
         else:
-            self.global_pool = None if pre_trained_vit is None else flag_pretrain(pre_trained_vit.global_pool)
+            self.global_pool = None if pre_trained_vit is None else pre_trained_vit.global_pool
             if self.global_pool:
-                self.trans_norm = flag_pretrain(pre_trained_vit.fc_norm)
+                self.trans_norm = pre_trained_vit.fc_norm
             else:
-                self.trans_norm = flag_pretrain(pre_trained_vit.norm)
+                self.trans_norm = pre_trained_vit.norm
         if pre_trained_vit is None:
             self.trans_cls_head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()  
         else:
-            self.trans_cls_head = flag_pretrain(pre_trained_vit.head)
+            self.trans_cls_head = pre_trained_vit.head
         # Classifier head for conv tower
         self.pooling = nn.AdaptiveAvgPool2d(1)
         self.conv_cls_head = nn.Linear(int(256 * channel_ratio), num_classes) if pre_trained_conformer is None else pre_trained_conformer.conv_cls_head
@@ -592,12 +608,13 @@ class TransConv(nn.Module):
         if self.has_pre_trained_vit:        
             if self.global_pool:
                 x_t = x_t[:, 1:, :].mean(dim=1)  # global pool without cls token
-                tran_cls = self.trans_norm(x_t)
+                x_t = self.trans_norm(x_t)
             else:
                 x_t = self.trans_norm(x_t)
-                tran_cls = x_t[:, 0]
+                x_t = x_t[:, 0]
         else:
             x_t = self.trans_norm(x_t)
-        tran_cls = self.trans_cls_head(x_t[:, 0])
+            x_t = x_t[:, 0]
+        tran_cls = self.trans_cls_head(x_t)
 
         return [conv_cls, tran_cls]

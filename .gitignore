@@ -2,3 +2,9 @@
 **/output
 **/output_dir
 **/runs
+**/*.yaml
+**/*.whl
+**/*.Dockerfile
+**/Dockerfile
+**/*.pyc
+**/*.pyo
