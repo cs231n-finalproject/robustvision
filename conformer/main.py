@@ -1,3 +1,4 @@
+import os
 import argparse
 import datetime
 import numpy as np
@@ -26,11 +27,11 @@ from torch.utils.tensorboard import SummaryWriter
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
-    parser.add_argument('--batch-size', default=24, type=int)
+    parser.add_argument('--batch-size', default=16, type=int)
     parser.add_argument('--epochs', default=10, type=int)
 
     # Model parameters
-    parser.add_argument('--model', default='Transconv_small_patch16', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='Conformer_small_patch16', type=str, metavar='MODEL',
                         help='Name of model to train', choices=['Conformer_small_patch16', 'deit_base_patch16_224', 'mae_vit_huge_patch14', \
                         'mae_vit_base_patch16', 'Transconv_small_patch16'])
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
@@ -127,7 +128,7 @@ def get_args_parser():
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # Dataset parameters
-    parser.add_argument('--data-path', default='~/Dataset/ImageNet_ILSVRC2012/', type=str,
+    parser.add_argument('--data-path', default=os.path.expanduser('~/Dataset/ImageNet_ILSVRC2012/'), type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'CIFAR10', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')

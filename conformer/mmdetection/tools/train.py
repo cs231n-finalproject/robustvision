@@ -20,8 +20,8 @@ from mmdet.utils import collect_env, get_root_logger
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')
-    parser.add_argument('--config', type=str, default='~/robustvision/conformer/mmdetection/configs/faster_rcnn/faster_rcnn_conformer_small_patch32_fpn_1x_coco.py', help='train config file path')
-    parser.add_argument('--work-dir', type=str, default='~/robustvision/conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800', help='the dir to save logs and models')
+    parser.add_argument('--config', type=str, default=os.path.expanduser('~/robustvision/conformer/mmdetection/configs/faster_rcnn/faster_rcnn_conformer_small_patch32_fpn_1x_coco.py'), help='train config file path')
+    parser.add_argument('--work-dir', type=str, default=os.path.expanduser('~/robustvision/conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch32_lr_1e_4_fpn_1x_coco_1344_800'), help='the dir to save logs and models')
     parser.add_argument(
         '--resume-from', help='the checkpoint file to resume from')
     parser.add_argument(
@@ -57,7 +57,7 @@ def parse_args():
         '--cfg-options',
         nargs='+',
         action=DictAction,
-        default={'model.pretrained':'~/robustvision/conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth', 'model.backbone.patch_size':32},
+        default={'model.pretrained':os.path.expanduser('~/robustvision/conformer/mmdetection/pretrain_models/Conformer_small_patch32.pth'), 'model.backbone.patch_size':32},
         help='override some settings in the used config, the key-value pair '
         'in xxx=yyy format will be merged into config file. If the value to '
         'be overwritten is a list, it should be like key="[a,b]" or key=a,b '

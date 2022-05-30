@@ -417,7 +417,7 @@ class Conformer(nn.Module):
         return {'cls_token'}
 
 
-    def forward(self, x):
+    def forward(self, x, monitor=False, writer=None, global_step=None):
         B = x.shape[0]
         cls_tokens = self.cls_token.expand(B, -1, -1)
 

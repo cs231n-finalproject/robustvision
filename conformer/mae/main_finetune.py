@@ -117,7 +117,7 @@ def get_args_parser():
                         help='Use class token instead of global pool for classification')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='~/Dataset/ImageNet_ILSVRC2012', type=str,
+    parser.add_argument('--data_path', default=os.path.expanduser('~/Dataset/ImageNet_ILSVRC2012'), type=str,
                         help='dataset path')
     parser.add_argument('--nb_classes', default=1000, type=int,
                         help='number of the classification types')
@@ -129,7 +129,7 @@ def get_args_parser():
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
-    parser.add_argument('--resume', default='~/robustvision/conformer/mae/checkpoints/mae_finetuned_vit_base.pth',
+    parser.add_argument('--resume', default=os.path.expanduser('~/robustvision/conformer/mae/checkpoints/mae_finetuned_vit_base.pth'),
                         help='resume from checkpoint')
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',

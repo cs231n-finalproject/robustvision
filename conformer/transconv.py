@@ -398,11 +398,11 @@ class ConvTransBlock(nn.Module):
                 x = m(x)
 
         if self.has_pre_conv_block and not self.finetune_conv:
-            #TODO design choice, fuse or not if conv tower does not allow finetune, No for now
-            # x_t_r = self.expand_block(x_t, H // self.dw_stride, W // self.dw_stride)
-            # x = self.fusion_block(x, x_t_r, return_x_2=False)
+            #TODO design choice, fuse or not if conv tower does not allow finetune, Yes for now
+            x_t_r = self.expand_block(x_t, H // self.dw_stride, W // self.dw_stride)
+            x = self.fusion_block(x, x_t_r, return_x_2=False)
             # don't fuse with transformer block            
-            x = self.fusion_block(x, None, return_x_2=False)
+            # x = self.fusion_block(x, None, return_x_2=False)
         else:
             # fuse with transformer block
             # [N, 197, 384] -> [N, 64, 56, 56]
