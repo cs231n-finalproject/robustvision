@@ -153,12 +153,12 @@ def Transconv_small_patch16(pretrained=False, **kwargs):
         model = TransConv(patch_size=16, channel_ratio=4, embed_dim=768 if pre_trained_vit is not None else 384, depth=12,
                         num_heads=6, mlp_ratio=4, qkv_bias=True,
                         pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
-                        additive_fusion_down=False, additive_fusion_up=False,                        
+                        additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=[56]+[56]*3+[28]*4+[14]*4, down_ftr_map_size=[197]*12,
                         **kwargs)
     else:
         model = TransConv(patch_size=16, channel_ratio=4, embed_dim=384, depth=12,
                         num_heads=6, mlp_ratio=4, qkv_bias=True,
-                        additive_fusion_down=False, additive_fusion_up=False,                        
+                        additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=[56]+[56]*3+[28]*4+[14]*4, down_ftr_map_size=[197]*12,               
                         **kwargs)
     return model
 
@@ -171,12 +171,12 @@ def Transconv_large_patch16(pretrained=False, **kwargs):
         model = TransConv(patch_size=16, channel_ratio=6, embed_dim=1024 if pre_trained_vit is not None else 576, depth=12,
                         num_heads=9, mlp_ratio=4, qkv_bias=True,
                         pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
-                        additive_fusion_down=False, additive_fusion_up=False,                        
+                        additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=[56]+[56]*3+[28]*4+[14]*4, down_ftr_map_size=[197]*12,
                         **kwargs)
     else:          
         model = TransConv(patch_size=16, channel_ratio=4, embed_dim=576, depth=12,
                         num_heads=9, mlp_ratio=4, qkv_bias=True,
-                        additive_fusion_down=False, additive_fusion_up=False,                        
+                        additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=[56]+[56]*3+[28]*4+[14]*4, down_ftr_map_size=[197]*12,
                         **kwargs)
     return model
 
@@ -188,11 +188,11 @@ def Transconv_base_patch14(pretrained=False, **kwargs):
         model = TransConv(patch_size=16, channel_ratio=6, embed_dim=1280 if pre_trained_vit is not None else 576, depth=12,
                         num_heads=9, mlp_ratio=4, qkv_bias=True,
                         pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
-                        additive_fusion_down=False, additive_fusion_up=False,
+                        additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=[56]+[56]*3+[28]*4+[14]*4, down_ftr_map_size=[197]*12,
                         **kwargs)
     else:
         model = TransConv(patch_size=16, channel_ratio=6, embed_dim=1280, depth=12,
                         num_heads=9, mlp_ratio=4, qkv_bias=True,
-                        additive_fusion_down=False, additive_fusion_up=False,
+                        additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=[56]+[56]*3+[28]*4+[14]*4, down_ftr_map_size=[197]*12,
                         **kwargs)
     return model

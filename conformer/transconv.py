@@ -33,7 +33,7 @@ class AdditiveAttention(nn.Module):
     Arg: 
         d_h: the last dimension of input
     '''
-    def __init__(self, d_h, hidden_size=200):
+    def __init__(self, d_h, hidden_size=5):
         super(AdditiveAttention, self).__init__()
         self.att_fc1 = nn.Linear(d_h, hidden_size)
         self.att_fc2 = nn.Linear(hidden_size, 1)
@@ -137,7 +137,7 @@ class ConvBlock(nn.Module):
         self.additive_fusion = additive_fusion
         if self.additive_fusion:
             d_h = up_shape[1]*up_shape[2]*up_shape[3]
-            d_e = 1024
+            d_e = 10
             self.additive_attention = AdditiveAttention(d_h, d_e)
 
         self.res_conv = res_conv
@@ -150,7 +150,7 @@ class ConvBlock(nn.Module):
     def additive(self, x, x_t):
         if self.additive_fusion:
             B, C, H, W = x.shape
-            x_stacked = torch.stack([x, x_t], dim=1).flatten(dim=1)
+            x_stacked = torch.stack([x, x_t], dim=1).flatten(2)
             x_fused = self.additive_attention(x_stacked)
             x_fused = x_fused.reshape((B, C, H, W))
         else:
@@ -367,8 +367,8 @@ class ConvTransBlock(nn.Module):
 
         self.additive_fusion = additive_fusion_down
         if self.additive_fusion:
-            d_h = down_shape[1]
-            d_e = 256
+            d_h = down_shape[1] * down_shape[2]
+            d_e = 5
             self.additive_attention = AdditiveAttention(d_h, d_e)
 
         self.dw_stride = dw_stride
@@ -378,8 +378,10 @@ class ConvTransBlock(nn.Module):
 
     def additive(self, x_st, x_t):
         if self.additive_fusion:
-            x_t_stacked = torch.stack([x_st, x_t], dim=1)
+            B, P, E = x_t.shape
+            x_t_stacked = torch.stack([x_st, x_t], dim=1).flatten(2)
             x_t_fused = self.additive_attention(x_t_stacked)
+            x_t_fused = x_t_fused.reshape((B, P, E))
         else:
             x_t_fused = x_st + x_t
         return x_t_fused
@@ -420,7 +422,7 @@ class TransConv(nn.Module):
     def __init__(self, patch_size=16, in_chans=3, num_classes=1000, base_channel=64, channel_ratio=4, num_med_block=0,
                  embed_dim=768, depth=12, num_heads=12, mlp_ratio=4., qkv_bias=False,
                  pre_trained_vit=None, finetune_vit=False, pre_trained_conformer=None, finetune_conv=True,
-                 additive_fusion_down=False, additive_fusion_up=False,
+                 additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=None, down_ftr_map_size=None,
                  qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.):
 
         # Transformer
@@ -496,7 +498,6 @@ class TransConv(nn.Module):
         # 2~4 stage
         init_stage = 2
         fin_stage = depth // 3 + 1
-        up_ftr_map_size = 64
         for i in range(init_stage, fin_stage):
             self.add_module('conv_trans_' + str(i),
                     ConvTransBlock(
@@ -507,16 +508,15 @@ class TransConv(nn.Module):
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
                         pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
                         finetune_vit=finetune_vit, finetune_conv=finetune_conv,
-                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up,
-                        up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
+                        additive_fusion_down=additive_fusion_down, down_shape=(None, down_ftr_map_size[i-1], embed_dim), additive_fusion_up=additive_fusion_up,
+                        up_shape=(None, stage_1_channel // expansion, up_ftr_map_size[i-1], up_ftr_map_size[i-1])
                     )
             )
 
         stage_2_channel = int(base_channel * channel_ratio * 2)
         # 5~8 stage
         init_stage = fin_stage # 5
-        fin_stage = fin_stage + depth // 3 # 9
-        up_ftr_map_size = 64        
+        fin_stage = fin_stage + depth // 3 # 9     
         for i in range(init_stage, fin_stage):
             s = 2 if i == init_stage else 1
             in_channel = stage_1_channel if i == init_stage else stage_2_channel
@@ -530,16 +530,15 @@ class TransConv(nn.Module):
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
                         pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
                         finetune_vit=finetune_vit, finetune_conv=finetune_conv,
-                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up,
-                        up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
+                        additive_fusion_down=additive_fusion_down, down_shape=(None, down_ftr_map_size[i-1], embed_dim), additive_fusion_up=additive_fusion_up,
+                        up_shape=(None, stage_2_channel // expansion, up_ftr_map_size[i-1], up_ftr_map_size[i-1])
                     )
             )
 
         stage_3_channel = int(base_channel * channel_ratio * 2 * 2)
         # 9~12 stage
         init_stage = fin_stage  # 9
-        fin_stage = fin_stage + depth // 3  # 13
-        up_ftr_map_size = 64        
+        fin_stage = fin_stage + depth // 3  # 13      
         for i in range(init_stage, fin_stage):
             s = 2 if i == init_stage else 1
             in_channel = stage_2_channel if i == init_stage else stage_3_channel
@@ -554,8 +553,8 @@ class TransConv(nn.Module):
                         pre_trans_block=pre_trained_vit.blocks[i-1] if pre_trained_vit is not None else None,
                         pre_convtrans_block=eval('pre_trained_conformer.conv_trans_' + str(i)) if pre_trained_conformer is not None else None,
                         finetune_vit=finetune_vit, finetune_conv=finetune_conv,
-                        additive_fusion_down=additive_fusion_down, down_shape=embed_dim, additive_fusion_up=additive_fusion_up,
-                        up_shape=(None, stage_1_channel // expansion, up_ftr_map_size, up_ftr_map_size)
+                        additive_fusion_down=additive_fusion_down, down_shape=(None, down_ftr_map_size[i-1], embed_dim), additive_fusion_up=additive_fusion_up,
+                        up_shape=(None, stage_3_channel // expansion, up_ftr_map_size[i-1], up_ftr_map_size[i-1])
                     )
             )
         self.fin_stage = fin_stage
@@ -608,7 +607,7 @@ class TransConv(nn.Module):
         x_t = self.trans_1(x_t)
 
         # 2 ~ final 
-        for i in range(2, self.fin_stage):
+        for i in range(2, self.fin_stage):         
             x, x_t = eval('self.conv_trans_' + str(i))(x, x_t)
             if monitor:
                 log_ftr_map_histograms(writer, x, x_t, i, global_step)            

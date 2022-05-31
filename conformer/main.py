@@ -27,11 +27,11 @@ from torch.utils.tensorboard import SummaryWriter
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
-    parser.add_argument('--batch-size', default=2, type=int)
+    parser.add_argument('--batch-size', default=180, type=int)
     parser.add_argument('--epochs', default=10, type=int)
 
     # Model parameters
-    parser.add_argument('--model', default='Transconv_large_patch16', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='Transconv_small_patch16', type=str, metavar='MODEL',
                         help='Name of model to train', choices=['Conformer_small_patch16', 'Conformer_base_patch16',
                              'deit_base_patch16_224', 'mae_vit_huge_patch14', 'mae_vit_base_patch16',
                              'Transconv_small_patch16', 'Transconv_large_patch16', 'Transconv_base_patch14'])
@@ -141,7 +141,7 @@ def get_args_parser():
     parser.add_argument('--pretrained', type=bool, default=True, help='True to load model with pretrained')    
 
     parser.add_argument('--evaluate_freq', type=int, default=1, help='frequency of perform evaluation (default: 1)')  
-    parser.add_argument('--output_dir', default='',
+    parser.add_argument('--output_dir', default=os.path.expanduser('~/Output'),
                         help='path where to save, empty for no saving')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
