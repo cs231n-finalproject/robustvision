@@ -27,14 +27,14 @@ from torch.utils.tensorboard import SummaryWriter
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
-    parser.add_argument('--batch-size', default=180, type=int)
+    parser.add_argument('--batch-size', default=2, type=int)
     parser.add_argument('--epochs', default=10, type=int)
 
     # Model parameters
-    parser.add_argument('--model', default='Transconv_small_patch16', type=str, metavar='MODEL',
-                        help='Name of model to train', choices=['Conformer_small_patch16', 'Conformer_base_patch16', \
-                             'deit_base_patch16_224', 'mae_vit_huge_patch14', \
-                             'mae_vit_base_patch16', 'Transconv_small_patch16', 'Transconv_base_patch16'])
+    parser.add_argument('--model', default='Transconv_large_patch16', type=str, metavar='MODEL',
+                        help='Name of model to train', choices=['Conformer_small_patch16', 'Conformer_base_patch16',
+                             'deit_base_patch16_224', 'mae_vit_huge_patch14', 'mae_vit_base_patch16',
+                             'Transconv_small_patch16', 'Transconv_large_patch16', 'Transconv_base_patch14'])
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
@@ -150,7 +150,7 @@ def get_args_parser():
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
-    parser.add_argument('--num_workers', default=10, type=int)
+    parser.add_argument('--num_workers', default=6, type=int)
     parser.add_argument('--pin-mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem',
@@ -158,7 +158,7 @@ def get_args_parser():
     parser.set_defaults(pin_mem=True)
 
     # tensorboard logging
-    parser.add_argument('--log_tensorboard', type=bool, default=True, help='True to log feature map histograms')  
+    parser.add_argument('--log_tensorboard', type=bool, default=False, help='True to log feature map histograms')  
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -332,7 +332,7 @@ def main(args):
     print("Start training")
     start_time = time.time()
     max_accuracy = 0.0
-    writer = SummaryWriter() if args.log_tensorboard else None
+    writer = SummaryWriter()
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -374,10 +374,9 @@ def main(args):
                 with (output_dir / "log.txt").open("a") as f:
                     f.write(json.dumps(log_stats) + "\n")
 
-            if args.log_tensorboard:
-                # visualization - training
-                utils.log_metrics(writer, {**{f'train_{k}': v for k, v in train_stats.items()}, **{f'test_{k}': v for k, v in test_stats.items()}}, epoch)
-                utils.log_weight_histograms(model, writer, epoch)
+            # visualization - evaluation
+            utils.log_metrics(writer, {**{f'train_{k}': v for k, v in train_stats.items()}, **{f'test_{k}': v for k, v in test_stats.items()}}, epoch)
+            utils.log_weight_histograms(model, writer, epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

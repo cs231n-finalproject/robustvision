@@ -141,7 +141,7 @@ def Conformer_base_patch16(pretrained=False, **kwargs):
     model = Conformer(patch_size=16, channel_ratio=6, embed_dim=576, depth=12,
                       num_heads=9, mlp_ratio=4, qkv_bias=True, **kwargs)
     if pretrained:
-        model = load_pretrain_model(model, model_path=os.path.expanduser('~/robustvision/conformer/mmdetection/pretrain_models/Conformer_base_patch32.pth'))
+        model = load_pretrain_model(model, model_path=os.path.expanduser('~/robustvision/conformer/mmdetection/pretrain_models/Conformer_base_patch16.pth'))
     return model
 
 @register_model
@@ -157,23 +157,42 @@ def Transconv_small_patch16(pretrained=False, **kwargs):
                         **kwargs)
     else:
         model = TransConv(patch_size=16, channel_ratio=4, embed_dim=384, depth=12,
-                        num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)
+                        num_heads=6, mlp_ratio=4, qkv_bias=True,
+                        additive_fusion_down=False, additive_fusion_up=False,                        
+                        **kwargs)
     return model
 
 @register_model
-def Transconv_base_patch16(pretrained=False, **kwargs):
+def Transconv_large_patch16(pretrained=False, **kwargs):
+    if pretrained:
+        pre_trained_vit = mae_vit_large_patch16(pretrained=True)
+        # pre_trained_vit = None  # uncomment to initialize only conv tower
+        pre_trained_conformer = Conformer_base_patch16(pretrained=True)    
+        model = TransConv(patch_size=16, channel_ratio=6, embed_dim=1024 if pre_trained_vit is not None else 576, depth=12,
+                        num_heads=9, mlp_ratio=4, qkv_bias=True,
+                        pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
+                        additive_fusion_down=False, additive_fusion_up=False,                        
+                        **kwargs)
+    else:          
+        model = TransConv(patch_size=16, channel_ratio=4, embed_dim=576, depth=12,
+                        num_heads=9, mlp_ratio=4, qkv_bias=True,
+                        additive_fusion_down=False, additive_fusion_up=False,                        
+                        **kwargs)
+    return model
+
+@register_model
+def Transconv_base_patch14(pretrained=False, **kwargs):
     if pretrained:
         pre_trained_vit = mae_vit_huge_patch14(pretrained=True)
-        pre_trained_conformer = Conformer_base_patch16(pretrained=True)        
+        pre_trained_conformer = Conformer_base_patch16(pretrained=True)
         model = TransConv(patch_size=16, channel_ratio=6, embed_dim=1280 if pre_trained_vit is not None else 576, depth=12,
                         num_heads=9, mlp_ratio=4, qkv_bias=True,
                         pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
                         additive_fusion_down=False, additive_fusion_up=False,
                         **kwargs)
     else:
-        model = Conformer(patch_size=16, channel_ratio=6, embed_dim=576, depth=12,
+        model = TransConv(patch_size=16, channel_ratio=6, embed_dim=1280, depth=12,
                         num_heads=9, mlp_ratio=4, qkv_bias=True,
-                        pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
                         additive_fusion_down=False, additive_fusion_up=False,
                         **kwargs)
     return model

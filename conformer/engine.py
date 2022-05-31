@@ -24,7 +24,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     local_step = 0        
     if log_tensorborad:
         # if global_rank == 0:    
-        steps_per_epoch = min(8640, max_step)
+        steps_per_epoch = min(len(data_loader), max_step)
         global_start_step = steps_per_epoch * epoch
         avg_loss = 0.0
         avg_acc1 = 0.0

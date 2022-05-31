@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
-
+import math
 from utils import freeze, log_ftr_map_histograms, flag_pretrain, is_pretrain
 from timm.models.layers import DropPath, trunc_normal_
 from vision_transformer import VisionTransformer as ViT
@@ -236,11 +236,12 @@ class FCUUp(nn.Module):
     def forward(self, x, H, W):
         B, _, C = x.shape
         # [N, 197, 384] -> [N, 196, 384] -> [N, 384, 196] -> [N, 384, 14, 14]
-        x_r = x[:, 1:].transpose(1, 2).reshape(B, C, H, W)
+        H_x_r = W_x_r = int(math.sqrt(x.shape[1]-1))
+        x_r = x[:, 1:].transpose(1, 2).reshape(B, C, H_x_r, W_x_r)
         # [N, 384, 14, 14] ->  [N, 64, 14, 14]
         x_r = self.act(self.bn(self.conv_project(x_r)))
         # [N, 64, 14, 14] -> [N, 64, 56, 56]
-        return F.interpolate(x_r, size=(H * self.up_stride, W * self.up_stride))
+        return F.interpolate(x_r, size=(H, W))
 
 
 class Med_ConvBlock(nn.Module):
@@ -407,7 +408,7 @@ class ConvTransBlock(nn.Module):
         else:
             # fuse with transformer block
             # [N, 197, 384] -> [N, 64, 56, 56]
-            x_t_r = self.expand_block(x_t, H // self.dw_stride, W // self.dw_stride)
+            x_t_r = self.expand_block(x_t, H, W)
             # [N, 256, 56, 56] + [N, 64, 56, 56] -> [N, 256, 56, 56]
             x = self.fusion_block(x, x_t_r, return_x_2=False)
 
