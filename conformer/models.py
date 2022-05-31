@@ -89,11 +89,12 @@ def mae_vit_large_patch16(pretrained=False, **kwargs):
         global_pool=True, **kwargs)
     model.default_cfg = _cfg()
     if pretrained:
-        checkpoint = torch.hub.load_state_dict_from_url(
-            url="https://dl.fbaipublicfiles.com/mae/finetune/mae_finetuned_vit_large.pth",
-            map_location="cpu", check_hash=True
-        )
-        model.load_state_dict(checkpoint["model"], strict=False)          
+        # checkpoint = torch.hub.load_state_dict_from_url(
+        #     url="https://dl.fbaipublicfiles.com/mae/finetune/mae_finetuned_vit_large.pth",
+        #     map_location="cpu", check_hash=True
+        # )
+        # model.load_state_dict(checkpoint["model"], strict=False)
+        model = load_pretrain_model(model, model_path=os.path.expanduser('~/robustvision/conformer/mae/checkpoints/mae_finetuned_vit_large.pth'))
     return model
 
 @register_model
@@ -152,7 +153,7 @@ def Transconv_small_patch16(pretrained=False, **kwargs):
         pre_trained_conformer = Conformer_small_patch16(pretrained=True)        
         model = TransConv(patch_size=16, channel_ratio=4, embed_dim=768 if pre_trained_vit is not None else 384, depth=12,
                         num_heads=6, mlp_ratio=4, qkv_bias=True,
-                        pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
+                        pre_trained_vit=pre_trained_vit, finetune_vit=False, vit_depth=12, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
                         additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=[56]+[56]*3+[28]*4+[14]*4, down_ftr_map_size=[197]*12,
                         **kwargs)
     else:
@@ -170,7 +171,7 @@ def Transconv_large_patch16(pretrained=False, **kwargs):
         pre_trained_conformer = Conformer_base_patch16(pretrained=True)    
         model = TransConv(patch_size=16, channel_ratio=6, embed_dim=1024 if pre_trained_vit is not None else 576, depth=12,
                         num_heads=9, mlp_ratio=4, qkv_bias=True,
-                        pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
+                        pre_trained_vit=pre_trained_vit, finetune_vit=False, vit_depth=24, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
                         additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=[56]+[56]*3+[28]*4+[14]*4, down_ftr_map_size=[197]*12,
                         **kwargs)
     else:          
@@ -187,7 +188,7 @@ def Transconv_base_patch14(pretrained=False, **kwargs):
         pre_trained_conformer = Conformer_base_patch16(pretrained=True)
         model = TransConv(patch_size=16, channel_ratio=6, embed_dim=1280 if pre_trained_vit is not None else 576, depth=12,
                         num_heads=9, mlp_ratio=4, qkv_bias=True,
-                        pre_trained_vit=pre_trained_vit, finetune_vit=False, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
+                        pre_trained_vit=pre_trained_vit, finetune_vit=False, vit_depth=32, pre_trained_conformer=pre_trained_conformer, finetune_conv=True,
                         additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=[56]+[56]*3+[28]*4+[14]*4, down_ftr_map_size=[197]*12,
                         **kwargs)
     else:

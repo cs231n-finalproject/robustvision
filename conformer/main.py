@@ -27,11 +27,11 @@ from torch.utils.tensorboard import SummaryWriter
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
-    parser.add_argument('--batch-size', default=180, type=int)
+    parser.add_argument('--batch-size', default=160, type=int)
     parser.add_argument('--epochs', default=10, type=int)
 
     # Model parameters
-    parser.add_argument('--model', default='Transconv_small_patch16', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='Transconv_base_patch14', type=str, metavar='MODEL',
                         help='Name of model to train', choices=['Conformer_small_patch16', 'Conformer_base_patch16',
                              'deit_base_patch16_224', 'mae_vit_huge_patch14', 'mae_vit_base_patch16',
                              'Transconv_small_patch16', 'Transconv_large_patch16', 'Transconv_base_patch14'])

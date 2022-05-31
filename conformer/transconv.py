@@ -421,7 +421,7 @@ class TransConv(nn.Module):
 
     def __init__(self, patch_size=16, in_chans=3, num_classes=1000, base_channel=64, channel_ratio=4, num_med_block=0,
                  embed_dim=768, depth=12, num_heads=12, mlp_ratio=4., qkv_bias=False,
-                 pre_trained_vit=None, finetune_vit=False, pre_trained_conformer=None, finetune_conv=True,
+                 pre_trained_vit=None, finetune_vit=False, vit_depth=12, pre_trained_conformer=None, finetune_conv=True,
                  additive_fusion_down=False, additive_fusion_up=False, up_ftr_map_size=None, down_ftr_map_size=None,
                  qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.):
 
@@ -434,6 +434,8 @@ class TransConv(nn.Module):
             pre_trained_vit.apply(flag_pretrain)
             if finetune_vit is False:
                 freeze(pre_trained_vit)
+            self.pre_trained_vit = pre_trained_vit
+            self.vit_final_stage = vit_depth + 1
         if pre_trained_conformer is not None:
             pre_trained_conformer.apply(flag_pretrain)
             if finetune_conv is False:
@@ -611,6 +613,10 @@ class TransConv(nn.Module):
             x, x_t = eval('self.conv_trans_' + str(i))(x, x_t)
             if monitor:
                 log_ftr_map_histograms(writer, x, x_t, i, global_step)            
+
+        # final ~ vit_final
+        for i in range(self.fin_stage, self.vit_final_stage):         
+            x_t = self.pre_trained_vit.blocks[i-1](x_t)
 
         # conv classification
         x_p = self.pooling(x).flatten(1)
