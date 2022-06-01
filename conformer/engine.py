@@ -18,7 +18,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     set_training_mode=True, writer=None, max_step=math.inf, log_tensorborad=False
-                    ):
+                    ):          
     # track the training progress
     global_rank = utils.get_rank()
     local_step = 0        

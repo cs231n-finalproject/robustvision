@@ -1,3 +1,4 @@
+from email.policy import strict
 import os
 import argparse
 import datetime
@@ -27,11 +28,11 @@ from torch.utils.tensorboard import SummaryWriter
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
-    parser.add_argument('--batch-size', default=160, type=int)
-    parser.add_argument('--epochs', default=10, type=int)
+    parser.add_argument('--batch-size', default=180, type=int)
+    parser.add_argument('--epochs', default=20, type=int)
 
     # Model parameters
-    parser.add_argument('--model', default='Transconv_base_patch14', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='Transconv_small_patch16', type=str, metavar='MODEL',
                         help='Name of model to train', choices=['Conformer_small_patch16', 'Conformer_base_patch16',
                              'deit_base_patch16_224', 'mae_vit_huge_patch14', 'mae_vit_base_patch16',
                              'Transconv_small_patch16', 'Transconv_large_patch16', 'Transconv_base_patch14'])
@@ -138,7 +139,9 @@ def get_args_parser():
                         type=str, help='semantic granularity')
     # * Finetuning params
     parser.add_argument('--finetune', default='', help='finetune from checkpoint')
-    parser.add_argument('--pretrained', type=bool, default=True, help='True to load model with pretrained')    
+    parser.add_argument('--pretrained', type=bool, default=True, help='True to load model with pretrained')
+    parser.add_argument('--finetune_vit', type=bool, default=False, help='True to fine tune transformer tower')
+    parser.add_argument('--finetune_conv', type=bool, default=True, help='True to fine tune conv tower')
 
     parser.add_argument('--evaluate_freq', type=int, default=1, help='frequency of perform evaluation (default: 1)')  
     parser.add_argument('--output_dir', default=os.path.expanduser('~/Output'),
@@ -146,7 +149,7 @@ def get_args_parser():
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
-    parser.add_argument('--resume', default='', help='resume from checkpoint')
+    parser.add_argument('--resume', default=os.path.expanduser('~/Output/small/checkpoint.pth'), help='resume from checkpoint')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
@@ -225,6 +228,8 @@ def main(args):
     model = create_model(
         args.model,
         pretrained=args.pretrained,
+        finetune_vit=args.finetune_vit,
+        finetune_conv=args.finetune_conv,
         num_classes=args.nb_classes,
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
@@ -314,11 +319,11 @@ def main(args):
             checkpoint = torch.load(args.resume, map_location='cpu')
         # pdb.set_trace()
         if 'model' in checkpoint.keys():
-            model_without_ddp.load_state_dict(checkpoint['model'])
+            model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
         else:
             model_without_ddp.load_state_dict(checkpoint)
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            optimizer.load_state_dict(checkpoint['optimizer'], strict=False)
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
             if args.model_ema:

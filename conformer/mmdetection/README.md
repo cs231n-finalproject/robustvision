@@ -36,6 +36,26 @@ python -m torch.distributed.launch --nproc_per_node=${GPU_NUM} --master_port=500
 #./tools/test.py ${CONFIG} ${WORK_DIR}/latest.pth --eval bbox
 ```
 
+
+```bash
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5
+export OMP_NUM_THREADS=1
+GPU_NUM=6
+
+CONFIG='~/robustvision/conformer/mmdetection/configs/faster_rcnn/faster_rcnn_conformer_small_patch16_fpn_1x_coco.py'
+WORK_DIR='~/robustvision/conformer/mmdetection/work_dir/faster_rcnn_conformer_small_patch16_lr_1e_4_fpn_1x_coco_1344_800'
+
+# Train
+python3 -m torch.distributed.launch --nproc_per_node=${GPU_NUM} --master_port=50040 --use_env ./conformer/mmdetection/tools/train.py --config ${CONFIG} --work-dir ${WORK_DIR} --gpus ${GPU_NUM}  --launcher pytorch --cfg-options model.pretrained='~/robustvision/conformer/mmdetection/pretrain_models/Conformer_small_patch16.pth' model.backbone.patch_size=16
+
+# Test on multiple cards
+python -m torch.distributed.launch --nproc_per_node=${GPU_NUM} --master_port=50040 --use_env ./tools/test.py ${CONFIG} ${WORK_DIR}/latest.pth --launcher pytorch  --eval bbox
+
+# Test on single card
+#./tools/test.py ${CONFIG} ${WORK_DIR}/latest.pth --eval bbox
+```
+
+
 Here, we use the `Conformer_small_patch32` as backbone network, whose pretrain model weight can be downloaded from [baidu (k7q5)](https://pan.baidu.com/s/1pum_kOOwQYn404ZeGzjMlg) or [google drive](https://drive.google.com/file/d/1UrvRg2hnXsie_z_y39Xavdts4qfrwZ1E/view?usp=sharing). And the results are shown as following:
 
 | Method        | Parameters | MACs   | FPS | Bbox mAP | Model link | Log link |
