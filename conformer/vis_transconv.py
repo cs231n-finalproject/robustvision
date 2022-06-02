@@ -13,6 +13,7 @@ from utils import load_pretrain_model
 from visualization.net_visualization_pytorch import preprocess
 from visualization.net_visualization_pytorch import compute_saliency_maps
 from datasets import build_dataset
+from main import main
 
 
 def get_model_resnet101():
@@ -25,27 +26,26 @@ def get_model_resnet101():
 
     return model_resnet101
 
-def get_model_transconv():
+def get_model_transconv(mode='eval', model='Transconv_small_patch16', device='cpu'): # or 'train'
     # Proposed Model
     parser = get_args_parser()
     args, unknowns = parser.parse_known_args()
 
-    print(f"Creating model: {args.model}")
-    transconv_model = create_model(
-        args.model,
-        pretrained=args.pretrained,
-        finetune_vit=args.finetune_vit,
-        finetune_conv=args.finetune_conv,
-        num_classes=1000,
-        drop_rate=args.drop,
-        drop_path_rate=args.drop_path,
-        drop_block_rate=args.drop_block,
-    )
-    checkpoint_paths = args.resume if args.resume else '~/Output/small/checkpoint.pth'
-    model_transconv = load_pretrain_model(transconv_model, checkpoint_paths, finetune=False)
-    # We don't want to train the model
-    # for param in model_transconv.parameters():
-    #     param.requires_grad = False
+    if mode == 'eval':
+        args.return_model_eval = True
+    else:
+        args.return_model_train = True
+
+    if model == 'Transconv_small_patch16':
+        args.model = 'Transconv_small_patch16'
+        args.resume = os.path.expanduser('~/Output/small/checkpoint.pth')
+    else:
+        args.model = 'Transconv_base_patch14'
+        args.resume = os.path.expanduser('~/Output/base/checkpoint.pth')      
+
+    args.device = device
+
+    model_transconv = main(args)
 
     return model_transconv
 
@@ -59,61 +59,97 @@ def get_dataset():
     return dataset_train, dataset_val
 
 
-resize = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
-    transforms.ToTensor(),
-])
+def get_data_loader(dataset, batch_size=64):
+    # Proposed Model
+    parser = get_args_parser()
+    args, unknowns = parser.parse_known_args()
 
-dataset_train, dataset_val = get_dataset()
+    args.batch_size = batch_size
+    data_loader_val = torch.utils.data.DataLoader(
+        dataset, batch_size=int(3.0 * args.batch_size),
+        shuffle=False, num_workers=args.num_workers,
+        pin_memory=args.pin_mem, drop_last=False
+    )
 
-
-from visualization.data_utils import load_imagenet_val
-X, y, class_names = load_imagenet_val(num=5)
-# np.append(y, '703')
-test_images = [Image.fromarray(x) for x in X]
-
-from visualization.data_utils import pil_loader
-path = '/home/hawei/Dataset/ImageNet_ILSVRC2012_FULL/train/n03891251/n03891251_6013.JPEG'
-test_image = pil_loader(path)
-test_image = test_image.resize((224,224))
-test_images += [test_image]
-x = np.asarray(test_image)
-X = np.concatenate([x[None, :, :, :], X], axis=0)
-y = np.insert(y, 0, 703)
-
-plt.figure(figsize=(12, 6))
-for i in range(5):
-    plt.subplot(1, 5, i + 1)
-    plt.imshow(X[i])
-    plt.title(class_names[y[i]])
-    plt.axis('off')
-plt.gcf().tight_layout()
+    return data_loader_val
 
 
-def show_saliency_maps(model):
-    # Convert X and y from numpy arrays to Torch Tensors
-    X_tensor = torch.cat([preprocess(test_image) for test_image in test_images], dim=0)
-    y_tensor = torch.LongTensor(y)
+# from engine import evaluate
 
-    # Compute saliency maps for images in X
-    saliency = compute_saliency_maps(X_tensor, y_tensor, model)
+# model_transconv = get_model_transconv('eval', model='Transconv_small_patch16')
 
-    # Convert the saliency map from Torch Tensor to numpy array and show images
-    # and saliency maps together.
-    saliency = saliency.numpy()
-    N = X.shape[0]
-    for i in range(N):
-        plt.subplot(2, N, i + 1)
-        plt.imshow(X[i])
-        plt.axis('off')
-        plt.title(class_names[y[i]])
-        plt.subplot(2, N, N + i + 1)
-        plt.imshow(saliency[i], cmap=plt.cm.hot)
-        plt.axis('off')
-        plt.gcf().set_size_inches(12, 5)
-    plt.show()
+# _, dataset_val = get_dataset()
+# data_loader_val = get_data_loader(dataset_val)
+# test_stats = evaluate(data_loader_val, model_transconv, 'cuda')
+# print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
 
-show_saliency_maps(get_model_resnet101())
+# large_model_transconv = get_model_transconv(mode='eval', model='Transconv_base_patch14', device='cpu')
+# test_stats_large = evaluate(data_loader_val, large_model_transconv, 'cpu')
+# print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats_large['acc1']:.1f}%")
 
-show_saliency_maps(get_model_transconv())
+
+# resize = transforms.Compose([
+#     transforms.Resize(256),
+#     transforms.CenterCrop(224),
+#     transforms.ToTensor(),
+# ])
+
+# dataset_train, dataset_val = get_dataset()
+
+
+# from visualization.data_utils import load_imagenet_val
+# from vis_transconv import get_dataset
+# dataset_train, dataset_val = get_dataset()
+# X, y, class_names = load_imagenet_val(num=4)
+# test_images = [Image.fromarray(x) for x in X]
+
+# # add one more imagge
+# def pil_loader(path: str) -> Image.Image:
+#     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
+#     with open(path, 'rb') as f:
+#         img = Image.open(f)
+#         return img.convert('RGB')
+
+# path = '/home/hawei/Dataset/ImageNet_ILSVRC2012/train/n02090622/n02090622_1914.JPEG'
+# test_image = pil_loader(path)
+# test_image = test_image.resize((224,224))
+# test_images = [test_image] + test_images
+# x = np.asarray(test_image)
+# X = np.concatenate([x[None, :, :, :], X], axis=0)
+# y = np.insert(y, 0, dataset_train.class_to_idx['n02090622'])
+
+# plt.figure(figsize=(12, 6))
+# for i in range(5):
+#     plt.subplot(1, 5, i + 1)
+#     plt.imshow(X[i])
+#     plt.title(class_names[y[i]])
+#     plt.axis('off')
+# plt.gcf().tight_layout()
+
+
+# def show_saliency_maps(model, device='cpu'):
+#     # Convert X and y from numpy arrays to Torch Tensors
+#     X_tensor = torch.cat([preprocess(test_image) for test_image in test_images], dim=0).to(device)
+#     y_tensor = torch.LongTensor(y).to(device)
+
+#     # Compute saliency maps for images in X
+#     saliency = compute_saliency_maps(X_tensor, y_tensor, model)
+
+#     # Convert the saliency map from Torch Tensor to numpy array and show images
+#     # and saliency maps together.
+#     saliency = saliency.numpy()
+#     N = X.shape[0]
+#     for i in range(N):
+#         plt.subplot(2, N, i + 1)
+#         plt.imshow(X[i])
+#         plt.axis('off')
+#         plt.title(class_names[y[i]])
+#         plt.subplot(2, N, N + i + 1)
+#         plt.imshow(saliency[i], cmap=plt.cm.hot)
+#         plt.axis('off')
+#         plt.gcf().set_size_inches(12, 5)
+#     plt.show()
+
+# # show_saliency_maps(get_model_resnet101())
+
+# show_saliency_maps(model_transconv)

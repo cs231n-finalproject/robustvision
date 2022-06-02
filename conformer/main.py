@@ -153,6 +153,8 @@ def get_args_parser():
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
+    parser.add_argument('--return_model_eval', action='store_true', help='Return model for evaluation only')
+    parser.add_argument('--return_model_train', action='store_true', help='Return model for training only')    
     parser.add_argument('--num_workers', default=6, type=int)
     parser.add_argument('--pin-mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
@@ -319,22 +321,26 @@ def main(args):
             checkpoint = torch.load(args.resume, map_location='cpu')
         # pdb.set_trace()
         if 'model' in checkpoint.keys():
-            model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
+           model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
         else:
             model_without_ddp.load_state_dict(checkpoint)
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer'], strict=False)
+            optimizer.load_state_dict(checkpoint['optimizer'])
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
             if args.model_ema:
                 utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
 
+    if args.return_model_eval:
+        return model
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
 
     print("Start training")
+    if args.return_model_train:
+        return model
     start_time = time.time()
     max_accuracy = 0.0
     writer = SummaryWriter()

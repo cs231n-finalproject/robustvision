@@ -8,5 +8,4 @@
 **/Dockerfile
 **/*.pyc
 **/*.pyo
-**/visualization
 **/*.pth
